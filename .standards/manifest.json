@@ -1,0 +1,171 @@
+{
+  "version": "3.3.0",
+  "upstream": {
+    "repo": "AsiaOstrich/universal-dev-standards",
+    "version": "5.0.0-rc.2",
+    "installed": "2026-03-04"
+  },
+  "level": 3,
+  "format": "ai",
+  "standardsScope": "minimal",
+  "contentMode": "index",
+  "standards": [
+    "ai/standards/deployment-standards.ai.yaml",
+    "ai/standards/documentation-writing-standards.ai.yaml",
+    "ai/standards/ai-agreement-standards.ai.yaml",
+    "ai/standards/virtual-organization-standards.ai.yaml",
+    "ai/standards/security-standards.ai.yaml",
+    "ai/standards/performance-standards.ai.yaml",
+    "ai/standards/accessibility-standards.ai.yaml",
+    "ai/standards/developer-memory.ai.yaml",
+    "ai/standards/project-context-memory.ai.yaml"
+  ],
+  "extensions": [
+    "extensions/locales/zh-tw.md"
+  ],
+  "integrations": [
+    "CLAUDE.md"
+  ],
+  "integrationConfigs": {},
+  "options": {
+    "display_language": "zh-tw",
+    "workflow": "github-flow",
+    "merge_strategy": "squash",
+    "commit_language": "bilingual",
+    "test_levels": [
+      "unit-testing",
+      "integration-testing",
+      "system-testing",
+      "e2e-testing"
+    ]
+  },
+  "aiTools": [
+    "claude-code"
+  ],
+  "skills": {
+    "installed": true,
+    "location": "project",
+    "names": [
+      "_shared",
+      "agents",
+      "ai",
+      "ai-collaboration-standards",
+      "ai-friendly-architecture",
+      "ai-instruction-standards",
+      "atdd-assistant",
+      "bdd-assistant",
+      "brainstorm-assistant",
+      "changelog-guide",
+      "checkin-assistant",
+      "code-review-assistant",
+      "commit-standards",
+      "docs-generator",
+      "documentation-guide",
+      "error-code-guide",
+      "forward-derivation",
+      "git-workflow-guide",
+      "logging-guide",
+      "methodology-system",
+      "project-discovery",
+      "project-structure-guide",
+      "refactoring-assistant",
+      "release-standards",
+      "requirement-assistant",
+      "reverse-engineer",
+      "spec-driven-dev",
+      "tdd-assistant",
+      "test-coverage-assistant",
+      "testing-guide",
+      "tools",
+      "workflows"
+    ],
+    "version": "5.0.0-rc.2",
+    "installations": [
+      {
+        "agent": "claude-code",
+        "level": "project"
+      }
+    ]
+  },
+  "commands": {
+    "installed": false,
+    "names": [],
+    "version": null,
+    "installations": []
+  },
+  "methodology": null,
+  "fileHashes": {
+    ".standards/deployment-standards.ai.yaml": {
+      "hash": "sha256:e9900792348882ab5627456b99610d13abbafde93dbcffc3bca0950ab169ffab",
+      "size": 5516,
+      "installedAt": "2026-03-04T04:44:54.533Z"
+    },
+    ".standards/documentation-writing-standards.ai.yaml": {
+      "hash": "sha256:a251f8fe360624dc1a5d00c2814a272f37e4f5d2cc5f2d4e1074c10e0ab18643",
+      "size": 5338,
+      "installedAt": "2026-03-04T04:44:54.533Z"
+    },
+    ".standards/ai-agreement-standards.ai.yaml": {
+      "hash": "sha256:6e5ed7f22f7267098ae1ff7dd236c7aa4bcc41a59d6bd4e58f150ac9fc25a048",
+      "size": 620,
+      "installedAt": "2026-03-04T04:44:54.533Z"
+    },
+    ".standards/virtual-organization-standards.ai.yaml": {
+      "hash": "sha256:2f634b60db4ffe62a77b374d07bd788785cada6333ce2b6332409734fe073214",
+      "size": 642,
+      "installedAt": "2026-03-04T04:44:54.533Z"
+    },
+    ".standards/security-standards.ai.yaml": {
+      "hash": "sha256:8802e9bbac456c06612102b655144a1f9d4483458bea9699952cdec22b7396bf",
+      "size": 4261,
+      "installedAt": "2026-03-04T04:44:54.533Z"
+    },
+    ".standards/performance-standards.ai.yaml": {
+      "hash": "sha256:c1f879f2114275813f0a2fbbd034b4cda361dec840463f9e6adc370b08bb14b0",
+      "size": 4563,
+      "installedAt": "2026-03-04T04:44:54.533Z"
+    },
+    ".standards/accessibility-standards.ai.yaml": {
+      "hash": "sha256:0ee788c5b64270d80e67a11a0b99937bf45338002c839a4b58fe46aed19a9db0",
+      "size": 4310,
+      "installedAt": "2026-03-04T04:44:54.533Z"
+    },
+    ".standards/developer-memory.ai.yaml": {
+      "hash": "sha256:f8a0c0e3f25289684ef142ded38eaa02ab9d5164463f77e5ba1f0c8223dc4275",
+      "size": 8004,
+      "installedAt": "2026-03-04T04:44:54.533Z"
+    },
+    ".standards/project-context-memory.ai.yaml": {
+      "hash": "sha256:1c739dd94b26a0fb62e64aade95298893e01ab1d7a4ed33d3e82c2b856f4c65c",
+      "size": 4405,
+      "installedAt": "2026-03-04T04:44:54.533Z"
+    },
+    ".standards/zh-tw.md": {
+      "hash": "sha256:47e575ab5e47f9a94a43e9d609f9f94d282206300ba93fb6283a5a6036986c42",
+      "size": 20458,
+      "installedAt": "2026-03-04T04:44:54.533Z"
+    }
+  },
+  "skillHashes": {
+    "claude-code/project/tdd-assistant/SKILL.md": {
+      "hash": "sha256:8ed81f24e07ecfa99722af20a876566c0d2a73c25dfe31c8a737fb08eca99ae3",
+      "size": 2556,
+      "installedAt": "2026-03-04T04:44:54.575Z"
+    },
+    "claude-code/project/tdd-assistant/guide.md": {
+      "hash": "sha256:9a023c08eb81100d334e339754d103eb147811283514f25989955bbba24e4bdf",
+      "size": 12128,
+      "installedAt": "2026-03-04T04:44:54.575Z"
+    }
+  },
+  "commandHashes": {},
+  "integrationBlockHashes": {
+    "CLAUDE.md": {
+      "blockHash": "sha256:617cfdc6a2954a451ecc18ab004faf8dca5766f2751666fc28312aef4cc94a63",
+      "blockSize": 1331,
+      "fullHash": "sha256:68e0b09e201d8efac03c99dabf3850032f7ba6e3c79cb5b16af65e38a7f1d7fe",
+      "fullSize": 4814,
+      "installedAt": "2026-03-04T04:44:54.536Z"
+    }
+  }
+}

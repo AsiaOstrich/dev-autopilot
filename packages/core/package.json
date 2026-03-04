@@ -1,0 +1,21 @@
+{
+  "name": "@dev-autopilot/core",
+  "version": "0.1.0",
+  "description": "Core orchestration engine for dev-autopilot",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ajv": "^8.18.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  },
+  "license": "Apache-2.0"
+}

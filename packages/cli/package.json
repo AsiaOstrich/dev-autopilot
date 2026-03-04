@@ -1,0 +1,25 @@
+{
+  "name": "@dev-autopilot/cli",
+  "version": "0.1.0",
+  "description": "CLI entry point for dev-autopilot",
+  "type": "module",
+  "bin": {
+    "dev-autopilot": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@dev-autopilot/core": "workspace:*",
+    "@dev-autopilot/adapter-claude": "workspace:*",
+    "@dev-autopilot/adapter-opencode": "workspace:*",
+    "commander": "^13.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  },
+  "license": "Apache-2.0"
+}
