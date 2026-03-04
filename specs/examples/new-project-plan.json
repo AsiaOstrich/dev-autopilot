@@ -1,0 +1,51 @@
+{
+  "project": "example-todo-api",
+  "agent": "claude",
+  "defaults": {
+    "max_turns": 30,
+    "max_budget_usd": 2.0,
+    "allowed_tools": ["Read", "Write", "Edit", "Bash"]
+  },
+  "tasks": [
+    {
+      "id": "T-001",
+      "title": "初始化專案結構",
+      "spec": "建立 Node.js + Express + TypeScript 專案骨架，含 tsconfig、package.json、src/ 目錄",
+      "depends_on": [],
+      "verify_command": "pnpm build",
+      "max_turns": 10,
+      "max_budget_usd": 0.5
+    },
+    {
+      "id": "T-002",
+      "title": "建立 DB schema",
+      "spec": "使用 Drizzle ORM 建立 todos 表：id (uuid), title (text), completed (boolean), created_at (timestamp)",
+      "depends_on": ["T-001"],
+      "verify_command": "pnpm build && pnpm test -- --grep schema",
+      "fork_session": true
+    },
+    {
+      "id": "T-003",
+      "title": "實作 CRUD API",
+      "spec": "實作 GET /todos, POST /todos, PATCH /todos/:id, DELETE /todos/:id",
+      "depends_on": ["T-002"],
+      "verify_command": "pnpm test -- --grep api",
+      "max_turns": 30,
+      "max_budget_usd": 2.0
+    },
+    {
+      "id": "T-004",
+      "title": "加入輸入驗證",
+      "spec": "使用 zod 驗證所有 API 輸入，錯誤回傳 400 + 結構化 error message",
+      "depends_on": ["T-003"],
+      "verify_command": "pnpm test -- --grep validation"
+    },
+    {
+      "id": "T-005",
+      "title": "加入 E2E 測試",
+      "spec": "使用 supertest 撰寫完整 CRUD 流程的 E2E 測試",
+      "depends_on": ["T-004"],
+      "verify_command": "pnpm test"
+    }
+  ]
+}
