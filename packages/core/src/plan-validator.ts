@@ -22,7 +22,7 @@ const taskSchema = {
     session_id: { type: "string", description: "Session ID from planning phase (optional)" },
     agent: {
       type: "string",
-      enum: ["claude", "opencode", "codex", "cline", "cursor"],
+      enum: ["claude", "opencode", "codex", "cline", "cursor", "cli"],
       description: "Default agent for execution",
     },
     defaults: {
@@ -33,6 +33,11 @@ const taskSchema = {
         allowed_tools: { type: "array", items: { type: "string" } },
         verify_command: { type: "string" },
       },
+    },
+    max_parallel: {
+      type: "integer",
+      minimum: 1,
+      description: "Maximum number of parallel tasks",
     },
     tasks: {
       type: "array",
@@ -47,13 +52,14 @@ const taskSchema = {
           depends_on: { type: "array", items: { type: "string" }, default: [] },
           agent: {
             type: "string",
-            enum: ["claude", "opencode", "codex", "cline", "cursor"],
+            enum: ["claude", "opencode", "codex", "cline", "cursor", "cli"],
           },
           verify_command: { type: "string" },
           max_turns: { type: "integer" },
           max_budget_usd: { type: "number" },
           allowed_tools: { type: "array", items: { type: "string" } },
           fork_session: { type: "boolean", default: true },
+          judge: { type: "boolean", description: "Enable Judge Agent review for this task" },
         },
       },
     },

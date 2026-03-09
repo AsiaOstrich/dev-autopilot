@@ -1,4 +1,4 @@
-# dev-autopilot
+# devap
 
 [繁體中文](README.zh-TW.md)
 
@@ -31,7 +31,7 @@ Agent-agnostic unattended development orchestrator.
 
 ### Option 1: Claude Code Skills (Recommended)
 
-Use dev-autopilot as Claude Code skills in your target project:
+Use devap as Claude Code skills in your target project:
 
 1. Copy the skills to your project:
    ```bash
@@ -55,17 +55,17 @@ pnpm install
 pnpm build
 
 # Run a task plan
-dev-autopilot run --plan ./specs/examples/new-project-plan.json
+devap run --plan ./specs/examples/new-project-plan.json
 
 # With options
-dev-autopilot run --plan plan.json --agent cli --parallel --dry-run
+devap run --plan plan.json --agent cli --parallel --dry-run
 ```
 
 ## Usage
 
 ### Skills Workflow (`/sdd` → `/plan` → `/orchestrate`)
 
-This is the primary way to use dev-autopilot within Claude Code:
+This is the primary way to use devap within Claude Code:
 
 1. **`/sdd <feature>`** — Write a specification document with requirements, acceptance criteria, and test plan
 2. **`/plan <spec.md>`** — Convert the spec into an executable `plan.json` with tasks, dependencies, and verification commands
@@ -74,7 +74,7 @@ This is the primary way to use dev-autopilot within Claude Code:
 ### CLI
 
 ```bash
-dev-autopilot run --plan <file> [options]
+devap run --plan <file> [options]
 ```
 
 | Option | Description |
@@ -119,9 +119,9 @@ See [specs/task-schema.json](specs/task-schema.json) for the full schema.
 
 | Agent | Adapter Package | Status |
 |-------|----------------|--------|
-| Claude Code (CLI) | `@dev-autopilot/adapter-claude` | ✅ Implemented |
-| OpenCode SDK | `@dev-autopilot/adapter-opencode` | ✅ Implemented |
-| CLI (shell commands) | `@dev-autopilot/adapter-cli` | ✅ Implemented |
+| Claude Code (CLI) | `@devap/adapter-claude` | ✅ Implemented |
+| OpenCode SDK | `@devap/adapter-opencode` | ✅ Implemented |
+| CLI (shell commands) | `@devap/adapter-cli` | ✅ Implemented |
 | OpenAI Codex | — | 🔵 Future |
 | Cline CLI | — | 🔵 Future |
 | Cursor API | — | 🔵 Future |
@@ -154,7 +154,7 @@ interface AgentAdapter {
 ```
 packages/
   core/            → Orchestrator, plan resolver, quality gate, fix loop, judge, types
-  cli/             → CLI entry point (dev-autopilot run)
+  cli/             → CLI entry point (devap run)
   adapter-claude/  → Claude Code CLI adapter
   adapter-opencode/→ OpenCode SDK adapter
   adapter-cli/     → Shell command adapter
@@ -177,7 +177,7 @@ docs/research/     → Design documents
 Copy the three skills directories to your target project:
 
 ```bash
-# From the dev-autopilot repo
+# From the devap repo
 cp -r .claude/skills/spec-driven-dev /path/to/target/.claude/skills/
 cp -r .claude/skills/plan /path/to/target/.claude/skills/
 cp -r .claude/skills/orchestrate /path/to/target/.claude/skills/
@@ -189,13 +189,13 @@ Then use `/sdd`, `/plan`, and `/orchestrate` in Claude Code within the target pr
 
 ```bash
 # Build and link globally
-cd /path/to/dev-autopilot
+cd /path/to/devap
 pnpm install && pnpm build
-pnpm -F @dev-autopilot/cli link --global
+pnpm -F @devap/cli link --global
 
 # Use from any project
 cd /path/to/target
-dev-autopilot run --plan plan.json --agent cli
+devap run --plan plan.json --agent cli
 ```
 
 ## Development

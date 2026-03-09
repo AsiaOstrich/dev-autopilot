@@ -14,7 +14,7 @@
     },
     "agent": {
       "type": "string",
-      "enum": ["claude", "opencode", "codex", "cline", "cursor"],
+      "enum": ["claude", "opencode", "codex", "cline", "cursor", "cli"],
       "description": "Default agent for execution"
     },
     "defaults": {
@@ -28,6 +28,11 @@
         },
         "verify_command": { "type": "string" }
       }
+    },
+    "max_parallel": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum number of parallel tasks"
     },
     "tasks": {
       "type": "array",
@@ -46,7 +51,7 @@
           },
           "agent": {
             "type": "string",
-            "enum": ["claude", "opencode", "codex", "cline", "cursor"]
+            "enum": ["claude", "opencode", "codex", "cline", "cursor", "cli"]
           },
           "verify_command": { "type": "string" },
           "max_turns": { "type": "integer" },
@@ -55,7 +60,20 @@
             "type": "array",
             "items": { "type": "string" }
           },
-          "fork_session": { "type": "boolean", "default": true }
+          "fork_session": { "type": "boolean", "default": true },
+          "judge": {
+            "type": "boolean",
+            "description": "Enable Judge Agent review for this task"
+          },
+          "acceptance_criteria": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Acceptance criteria list — each item is an observable verification condition"
+          },
+          "user_intent": {
+            "type": "string",
+            "description": "Why this task is needed — the user's underlying goal"
+          }
         }
       }
     }

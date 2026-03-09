@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "dev-autopilot"
+name = "devap"
 version = "0.1.0"
 description = "Agent-agnostic unattended development orchestrator"
 requires-python = ">=3.11"
@@ -23,7 +23,7 @@ dev = [
 ]
 
 [project.scripts]
-dev-autopilot = "dev_autopilot.__main__:main"
+devap = "devap.__main__:main"
 
 [tool.ruff]
 target-version = "py311"

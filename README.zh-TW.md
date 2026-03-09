@@ -1,4 +1,4 @@
-# dev-autopilot
+# devap
 
 [English](README.md)
 
@@ -31,7 +31,7 @@ Agent 無關的無人值守開發編排器。
 
 ### 方式一：Claude Code Skill 模式（推薦）
 
-將 dev-autopilot 的 Skills 部署到目標專案：
+將 devap 的 Skills 部署到目標專案：
 
 1. 複製 Skills 到你的專案：
    ```bash
@@ -55,17 +55,17 @@ pnpm install
 pnpm build
 
 # 執行任務計畫
-dev-autopilot run --plan ./specs/examples/new-project-plan.json
+devap run --plan ./specs/examples/new-project-plan.json
 
 # 搭配選項
-dev-autopilot run --plan plan.json --agent cli --parallel --dry-run
+devap run --plan plan.json --agent cli --parallel --dry-run
 ```
 
 ## 使用方式
 
 ### Skills 工作流程（`/sdd` → `/plan` → `/orchestrate`）
 
-這是在 Claude Code 中使用 dev-autopilot 的主要方式：
+這是在 Claude Code 中使用 devap 的主要方式：
 
 1. **`/sdd <功能>`** — 撰寫規格文件，包含需求、驗收條件與測試計畫
 2. **`/plan <spec.md>`** — 將規格轉換為可執行的 `plan.json`，包含任務、依賴與驗證指令
@@ -74,7 +74,7 @@ dev-autopilot run --plan plan.json --agent cli --parallel --dry-run
 ### CLI
 
 ```bash
-dev-autopilot run --plan <file> [options]
+devap run --plan <file> [options]
 ```
 
 | 選項 | 說明 |
@@ -119,9 +119,9 @@ dev-autopilot run --plan <file> [options]
 
 | Agent | Adapter 套件 | 狀態 |
 |-------|-------------|------|
-| Claude Code (CLI) | `@dev-autopilot/adapter-claude` | ✅ 已實作 |
-| OpenCode SDK | `@dev-autopilot/adapter-opencode` | ✅ 已實作 |
-| CLI（shell 指令） | `@dev-autopilot/adapter-cli` | ✅ 已實作 |
+| Claude Code (CLI) | `@devap/adapter-claude` | ✅ 已實作 |
+| OpenCode SDK | `@devap/adapter-opencode` | ✅ 已實作 |
+| CLI（shell 指令） | `@devap/adapter-cli` | ✅ 已實作 |
 | OpenAI Codex | — | 🔵 未來 |
 | Cline CLI | — | 🔵 未來 |
 | Cursor API | — | 🔵 未來 |
@@ -154,7 +154,7 @@ interface AgentAdapter {
 ```
 packages/
   core/            → 編排器、計畫解析器、品質關卡、Fix Loop、Judge、型別
-  cli/             → CLI 入口（dev-autopilot run）
+  cli/             → CLI 入口（devap run）
   adapter-claude/  → Claude Code CLI adapter
   adapter-opencode/→ OpenCode SDK adapter
   adapter-cli/     → Shell 指令 adapter
@@ -177,7 +177,7 @@ docs/research/     → 設計文件
 將三個 Skills 目錄複製到目標專案：
 
 ```bash
-# 從 dev-autopilot repo
+# 從 devap repo
 cp -r .claude/skills/spec-driven-dev /path/to/target/.claude/skills/
 cp -r .claude/skills/plan /path/to/target/.claude/skills/
 cp -r .claude/skills/orchestrate /path/to/target/.claude/skills/
@@ -189,13 +189,13 @@ cp -r .claude/skills/orchestrate /path/to/target/.claude/skills/
 
 ```bash
 # 建置並全域連結
-cd /path/to/dev-autopilot
+cd /path/to/devap
 pnpm install && pnpm build
-pnpm -F @dev-autopilot/cli link --global
+pnpm -F @devap/cli link --global
 
 # 在任何專案中使用
 cd /path/to/target
-dev-autopilot run --plan plan.json --agent cli
+devap run --plan plan.json --agent cli
 ```
 
 ## 開發

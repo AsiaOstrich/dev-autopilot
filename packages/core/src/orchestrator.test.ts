@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { orchestrate, topologicalSort } from "./orchestrator.js";
-import type { AgentAdapter, Task, TaskPlan, TaskResult, ExecuteOptions } from "./types.js";
+import { orchestrate, topologicalSort, topologicalLayers } from "./orchestrator.js";
+import type { AgentAdapter, CheckpointSummary, QualityConfig, Task, TaskPlan, TaskResult, ExecuteOptions } from "./types.js";
 
 /** 建立 mock adapter */
 function createMockAdapter(
@@ -63,6 +63,41 @@ describe("topologicalSort", () => {
     expect(ids.indexOf("T-001")).toBeLessThan(ids.indexOf("T-003"));
     expect(ids.indexOf("T-002")).toBeLessThan(ids.indexOf("T-004"));
     expect(ids.indexOf("T-003")).toBeLessThan(ids.indexOf("T-004"));
+  });
+});
+
+describe("topologicalLayers", () => {
+  it("應將無依賴的 tasks 放在同一層", () => {
+    const tasks: Task[] = [
+      { id: "T-001", title: "A", spec: "X" },
+      { id: "T-002", title: "B", spec: "Y" },
+      { id: "T-003", title: "C", spec: "Z" },
+    ];
+    const layers = topologicalLayers(tasks);
+    expect(layers).toHaveLength(1);
+    expect(layers[0]).toHaveLength(3);
+  });
+
+  it("應將線性依賴分成多層", () => {
+    const layers = topologicalLayers(simplePlan.tasks);
+    expect(layers).toHaveLength(3);
+    expect(layers[0].map(t => t.id)).toEqual(["T-001"]);
+    expect(layers[1].map(t => t.id)).toEqual(["T-002"]);
+    expect(layers[2].map(t => t.id)).toEqual(["T-003"]);
+  });
+
+  it("應將菱形依賴正確分層", () => {
+    const tasks: Task[] = [
+      { id: "T-001", title: "Root", spec: "R" },
+      { id: "T-002", title: "Left", spec: "L", depends_on: ["T-001"] },
+      { id: "T-003", title: "Right", spec: "R", depends_on: ["T-001"] },
+      { id: "T-004", title: "Merge", spec: "M", depends_on: ["T-002", "T-003"] },
+    ];
+    const layers = topologicalLayers(tasks);
+    expect(layers).toHaveLength(3);
+    expect(layers[0].map(t => t.id)).toEqual(["T-001"]);
+    expect(layers[1].map(t => t.id).sort()).toEqual(["T-002", "T-003"]);
+    expect(layers[2].map(t => t.id)).toEqual(["T-004"]);
   });
 });
 
@@ -211,5 +246,363 @@ describe("orchestrate", () => {
 
     expect(messages.length).toBeGreaterThan(0);
     expect(messages.some((m) => m.includes("T-001"))).toBe(true);
+  });
+
+  it("並行模式應正確執行所有 tasks", async () => {
+    const adapter = createMockAdapter();
+    const report = await orchestrate(simplePlan, adapter, {
+      ...defaultOptions,
+      parallel: true,
+    });
+
+    expect(report.summary.total_tasks).toBe(3);
+    expect(report.summary.succeeded).toBe(3);
+    expect(report.summary.failed).toBe(0);
+    expect(adapter.executeTask).toHaveBeenCalledTimes(3);
+  });
+
+  it("並行模式下依賴失敗應 skip 後續 tasks", async () => {
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => {
+        if (task.id === "T-001") {
+          return { task_id: task.id, status: "failed", error: "compile error" };
+        }
+        return { task_id: task.id, status: "success" };
+      }),
+    });
+
+    const report = await orchestrate(simplePlan, adapter, {
+      ...defaultOptions,
+      parallel: true,
+    });
+
+    expect(report.summary.failed).toBe(1);
+    expect(report.summary.skipped).toBe(2);
+  });
+
+  it("並行模式應並行執行同層 tasks", async () => {
+    const executionOrder: string[] = [];
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => {
+        executionOrder.push(task.id);
+        return { task_id: task.id, status: "success", cost_usd: 0.5 };
+      }),
+    });
+
+    const parallelPlan: TaskPlan = {
+      project: "test",
+      tasks: [
+        { id: "T-001", title: "Root", spec: "R" },
+        { id: "T-002", title: "Left", spec: "L", depends_on: ["T-001"] },
+        { id: "T-003", title: "Right", spec: "R", depends_on: ["T-001"] },
+        { id: "T-004", title: "Merge", spec: "M", depends_on: ["T-002", "T-003"] },
+      ],
+    };
+
+    const report = await orchestrate(parallelPlan, adapter, {
+      ...defaultOptions,
+      parallel: true,
+    });
+
+    expect(report.summary.succeeded).toBe(4);
+    // T-001 必須在 T-002、T-003 之前
+    expect(executionOrder.indexOf("T-001")).toBeLessThan(executionOrder.indexOf("T-002"));
+    expect(executionOrder.indexOf("T-001")).toBeLessThan(executionOrder.indexOf("T-003"));
+    // T-002、T-003 必須在 T-004 之前
+    expect(executionOrder.indexOf("T-002")).toBeLessThan(executionOrder.indexOf("T-004"));
+    expect(executionOrder.indexOf("T-003")).toBeLessThan(executionOrder.indexOf("T-004"));
+  });
+
+  it("maxParallel 應限制同時執行的 task 數", async () => {
+    const adapter = createMockAdapter();
+
+    const plan: TaskPlan = {
+      project: "test",
+      tasks: [
+        { id: "T-001", title: "A", spec: "X" },
+        { id: "T-002", title: "B", spec: "Y" },
+        { id: "T-003", title: "C", spec: "Z" },
+      ],
+    };
+
+    const report = await orchestrate(plan, adapter, {
+      ...defaultOptions,
+      parallel: true,
+      maxParallel: 2,
+    });
+
+    expect(report.summary.total_tasks).toBe(3);
+    expect(report.summary.succeeded).toBe(3);
+  });
+});
+
+describe("orchestrate（品質模式）", () => {
+  /** 品質設定：none → 行為與原有一致 */
+  const noneQuality: QualityConfig = {
+    verify: false,
+    judge_policy: "never",
+    max_retries: 0,
+    max_retry_budget_usd: 0,
+  };
+
+  /** 品質設定：minimal → verify only */
+  const minimalQuality: QualityConfig = {
+    verify: true,
+    judge_policy: "never",
+    max_retries: 0,
+    max_retry_budget_usd: 0,
+  };
+
+  it("qualityConfig=none → 與原有行為一致", async () => {
+    const adapter = createMockAdapter();
+    const report = await orchestrate(simplePlan, adapter, {
+      ...defaultOptions,
+      qualityConfig: noneQuality,
+    });
+    expect(report.summary.succeeded).toBe(3);
+    expect(adapter.executeTask).toHaveBeenCalledTimes(3);
+  });
+
+  it("qualityConfig=minimal + task 無 verify_command → 仍 success（verify 步驟跳過）", async () => {
+    const adapter = createMockAdapter();
+    const plan: TaskPlan = {
+      project: "test",
+      tasks: [{ id: "T-001", title: "A", spec: "do it" }],
+    };
+
+    const report = await orchestrate(plan, adapter, {
+      ...defaultOptions,
+      qualityConfig: minimalQuality,
+    });
+
+    // 無 verify_command → quality gate 無步驟 → 直接通過
+    expect(report.summary.succeeded).toBe(1);
+  });
+
+  it("qualityConfig + adapter 失敗 → fix loop 首次即 fail（max_retries=0）", async () => {
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => ({
+        task_id: task.id,
+        status: "failed",
+        error: "compile error",
+        cost_usd: 0.5,
+      })),
+    });
+    const plan: TaskPlan = {
+      project: "test",
+      tasks: [{ id: "T-001", title: "A", spec: "do it", verify_command: "pnpm test" }],
+    };
+
+    const report = await orchestrate(plan, adapter, {
+      ...defaultOptions,
+      qualityConfig: minimalQuality,
+    });
+
+    expect(report.summary.failed).toBe(1);
+    expect(report.tasks[0].retry_count).toBe(0);
+  });
+
+  it("qualityConfig + max_retries=1 + 首次失敗第二次成功 → success", async () => {
+    let callCount = 0;
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => {
+        callCount++;
+        if (callCount === 1) {
+          return { task_id: task.id, status: "failed", error: "first fail", cost_usd: 0.3 };
+        }
+        return { task_id: task.id, status: "success", cost_usd: 0.3 };
+      }),
+    });
+
+    const retryQuality: QualityConfig = {
+      verify: false, // 簡化：不跑 verify，只測 fix loop 機制
+      judge_policy: "never",
+      max_retries: 1,
+      max_retry_budget_usd: 2.0,
+    };
+
+    const plan: TaskPlan = {
+      project: "test",
+      tasks: [{ id: "T-001", title: "A", spec: "do it" }],
+    };
+
+    const report = await orchestrate(plan, adapter, {
+      ...defaultOptions,
+      qualityConfig: retryQuality,
+    });
+
+    expect(report.summary.succeeded).toBe(1);
+    expect(report.tasks[0].retry_count).toBe(1);
+    expect(adapter.executeTask).toHaveBeenCalledTimes(2);
+  });
+
+  it("重試時 feedback 應注入到 task spec", async () => {
+    const specs: string[] = [];
+    let callCount = 0;
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => {
+        specs.push(task.spec);
+        callCount++;
+        if (callCount === 1) {
+          return { task_id: task.id, status: "failed", error: "missing import", cost_usd: 0.2 };
+        }
+        return { task_id: task.id, status: "success", cost_usd: 0.2 };
+      }),
+    });
+
+    const retryQuality: QualityConfig = {
+      verify: false,
+      judge_policy: "never",
+      max_retries: 1,
+      max_retry_budget_usd: 2.0,
+    };
+
+    const plan: TaskPlan = {
+      project: "test",
+      tasks: [{ id: "T-001", title: "A", spec: "implement feature" }],
+    };
+
+    await orchestrate(plan, adapter, {
+      ...defaultOptions,
+      qualityConfig: retryQuality,
+    });
+
+    // 第一次：原始 spec
+    expect(specs[0]).toBe("implement feature");
+    // 第二次：注入了 feedback
+    expect(specs[1]).toContain("implement feature");
+    expect(specs[1]).toContain("前次失敗回饋");
+    expect(specs[1]).toContain("missing import");
+  });
+
+  it("品質模式應產出 quality_metrics", async () => {
+    let callCount = 0;
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => {
+        callCount++;
+        // T-001 首次失敗，重試成功
+        if (task.id === "T-001" && callCount === 1) {
+          return { task_id: task.id, status: "failed", error: "err", cost_usd: 0.2 };
+        }
+        return { task_id: task.id, status: "success", cost_usd: 0.3 };
+      }),
+    });
+
+    const retryQuality: QualityConfig = {
+      verify: false,
+      judge_policy: "never",
+      max_retries: 1,
+      max_retry_budget_usd: 2.0,
+    };
+
+    const plan: TaskPlan = {
+      project: "test",
+      tasks: [
+        { id: "T-001", title: "A", spec: "a" },
+        { id: "T-002", title: "B", spec: "b", depends_on: ["T-001"] },
+      ],
+    };
+
+    const report = await orchestrate(plan, adapter, {
+      ...defaultOptions,
+      qualityConfig: retryQuality,
+    });
+
+    expect(report.quality_metrics).toBeDefined();
+    expect(report.quality_metrics!.verification_pass_rate).toBe(1); // 2/2
+    expect(report.quality_metrics!.total_retries).toBe(1);
+    expect(report.quality_metrics!.first_pass_rate).toBe(0.5); // T-002 首次通過，T-001 重試
+  });
+
+  it("qualityConfig=none → 不產出 quality_metrics", async () => {
+    const adapter = createMockAdapter();
+    const report = await orchestrate(simplePlan, adapter, {
+      ...defaultOptions,
+      qualityConfig: noneQuality,
+    });
+    expect(report.quality_metrics).toBeUndefined();
+  });
+});
+
+describe("orchestrate（Checkpoint）", () => {
+  it("checkpoint_policy=never → 不呼叫 onCheckpoint", async () => {
+    const adapter = createMockAdapter();
+    const onCheckpoint = vi.fn(async () => "continue" as const);
+
+    await orchestrate(simplePlan, adapter, {
+      ...defaultOptions,
+      parallel: true,
+      checkpointPolicy: "never",
+      onCheckpoint,
+    });
+
+    expect(onCheckpoint).not.toHaveBeenCalled();
+  });
+
+  it("checkpoint_policy=after_each_layer → 每層完成後呼叫 onCheckpoint", async () => {
+    const adapter = createMockAdapter();
+    const onCheckpoint = vi.fn(async () => "continue" as const);
+
+    await orchestrate(simplePlan, adapter, {
+      ...defaultOptions,
+      parallel: true,
+      checkpointPolicy: "after_each_layer",
+      onCheckpoint,
+    });
+
+    // simplePlan 有 3 層線性依賴，最後一層不觸發 checkpoint
+    expect(onCheckpoint).toHaveBeenCalledTimes(2);
+
+    // 驗證 checkpoint summary 結構
+    const firstCall = onCheckpoint.mock.calls[0] as unknown as [CheckpointSummary];
+    expect(firstCall[0].layer_index).toBe(0);
+    expect(firstCall[0].total_layers).toBe(3);
+    expect(firstCall[0].layer_results).toHaveLength(1);
+    expect(firstCall[0].layer_results[0].task_id).toBe("T-001");
+  });
+
+  it("onCheckpoint 回傳 abort → 停止後續層", async () => {
+    const adapter = createMockAdapter();
+    const onCheckpoint = vi.fn(async () => "abort" as const);
+
+    const report = await orchestrate(simplePlan, adapter, {
+      ...defaultOptions,
+      parallel: true,
+      checkpointPolicy: "after_each_layer",
+      onCheckpoint,
+    });
+
+    // 只執行第一層後中止
+    expect(onCheckpoint).toHaveBeenCalledTimes(1);
+    expect(report.summary.succeeded).toBe(1);
+    expect(report.summary.total_tasks).toBe(1);
+  });
+
+  it("序列模式下 checkpoint_policy=after_each_layer → 每個 task 後呼叫", async () => {
+    const adapter = createMockAdapter();
+    const onCheckpoint = vi.fn(async () => "continue" as const);
+
+    await orchestrate(simplePlan, adapter, {
+      ...defaultOptions,
+      checkpointPolicy: "after_each_layer",
+      onCheckpoint,
+    });
+
+    // 序列模式 3 個 task，最後一個不觸發
+    expect(onCheckpoint).toHaveBeenCalledTimes(2);
+  });
+
+  it("序列模式下 onCheckpoint 回傳 abort → 停止後續 task", async () => {
+    const adapter = createMockAdapter();
+    const onCheckpoint = vi.fn(async () => "abort" as const);
+
+    const report = await orchestrate(simplePlan, adapter, {
+      ...defaultOptions,
+      checkpointPolicy: "after_each_layer",
+      onCheckpoint,
+    });
+
+    expect(report.summary.succeeded).toBe(1);
+    expect(report.summary.total_tasks).toBe(1);
   });
 });

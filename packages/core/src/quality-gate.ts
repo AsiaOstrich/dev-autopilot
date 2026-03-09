@@ -1,0 +1,161 @@
+/**
+ * Quality Gate — 品質門檻執行器
+ *
+ * 依序執行 verify_command → lint_command → type_check_command，
+ * 全部通過才視為品質門檻通過。
+ *
+ * 透過回呼函式執行 shell 指令，方便測試 mock。
+ */
+
+import type { QualityConfig, Task } from "./types.js";
+
+/**
+ * Quality Gate 檢查結果
+ */
+export interface QualityGateResult {
+  /** 是否全部通過 */
+  passed: boolean;
+  /** 各步驟結果 */
+  steps: QualityGateStep[];
+  /** 失敗的回饋訊息（用於 fix loop 注入 agent prompt） */
+  feedback?: string;
+}
+
+/**
+ * Quality Gate 單步結果
+ */
+export interface QualityGateStep {
+  /** 步驟名稱 */
+  name: "verify" | "lint" | "type_check";
+  /** 執行的指令 */
+  command: string;
+  /** 是否通過 */
+  passed: boolean;
+  /** 指令輸出（stdout + stderr） */
+  output: string;
+}
+
+/**
+ * Shell 指令執行器回呼
+ *
+ * @param command - 要執行的 shell 指令
+ * @param cwd - 工作目錄
+ * @returns { exitCode, stdout, stderr }
+ */
+export type ShellExecutor = (
+  command: string,
+  cwd: string,
+) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
+
+/**
+ * Quality Gate 選項
+ */
+export interface QualityGateOptions {
+  /** 工作目錄 */
+  cwd: string;
+  /** Shell 指令執行器 */
+  shellExecutor: ShellExecutor;
+  /** 進度回呼 */
+  onProgress?: (message: string) => void;
+}
+
+/**
+ * 執行品質門檻檢查
+ *
+ * 依序執行：
+ * 1. verify_command（若 task 有設定且 quality.verify 為 true）
+ * 2. lint_command（若 quality config 有設定）
+ * 3. type_check_command（若 quality config 有設定）
+ *
+ * 任一步驟失敗即停止，回傳失敗結果。
+ *
+ * @param task - 已執行完成的任務
+ * @param qualityConfig - 品質設定
+ * @param options - 執行選項
+ * @returns Quality Gate 結果
+ */
+export async function runQualityGate(
+  task: Task,
+  qualityConfig: QualityConfig,
+  options: QualityGateOptions,
+): Promise<QualityGateResult> {
+  const steps: QualityGateStep[] = [];
+
+  // 步驟 1：verify_command
+  if (qualityConfig.verify && task.verify_command) {
+    options.onProgress?.(`[${task.id}] Quality Gate: verify_command → ${task.verify_command}`);
+    const step = await executeStep("verify", task.verify_command, options);
+    steps.push(step);
+    if (!step.passed) {
+      return buildFailResult(steps, step);
+    }
+  }
+
+  // 步驟 2：lint_command
+  if (qualityConfig.lint_command) {
+    options.onProgress?.(`[${task.id}] Quality Gate: lint → ${qualityConfig.lint_command}`);
+    const step = await executeStep("lint", qualityConfig.lint_command, options);
+    steps.push(step);
+    if (!step.passed) {
+      return buildFailResult(steps, step);
+    }
+  }
+
+  // 步驟 3：type_check_command
+  if (qualityConfig.type_check_command) {
+    options.onProgress?.(`[${task.id}] Quality Gate: type_check → ${qualityConfig.type_check_command}`);
+    const step = await executeStep("type_check", qualityConfig.type_check_command, options);
+    steps.push(step);
+    if (!step.passed) {
+      return buildFailResult(steps, step);
+    }
+  }
+
+  return { passed: true, steps };
+}
+
+/**
+ * 執行單一品質門檻步驟
+ */
+async function executeStep(
+  name: QualityGateStep["name"],
+  command: string,
+  options: QualityGateOptions,
+): Promise<QualityGateStep> {
+  try {
+    const { exitCode, stdout, stderr } = await options.shellExecutor(command, options.cwd);
+    const output = [stdout, stderr].filter(Boolean).join("\n");
+    return {
+      name,
+      command,
+      passed: exitCode === 0,
+      output: output.slice(0, 5000),
+    };
+  } catch (error) {
+    return {
+      name,
+      command,
+      passed: false,
+      output: `執行錯誤：${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
+ * 構建失敗結果，含 feedback 供 fix loop 使用
+ */
+function buildFailResult(
+  steps: QualityGateStep[],
+  failedStep: QualityGateStep,
+): QualityGateResult {
+  const feedback = [
+    `品質門檻「${failedStep.name}」失敗。`,
+    `執行指令：${failedStep.command}`,
+    `輸出：`,
+    failedStep.output,
+    "",
+    "請修正上述問題後重試。",
+  ].join("\n");
+
+  return { passed: false, steps, feedback };
+}

@@ -18,12 +18,12 @@ import type {
   ExecuteOptions,
   Task,
   TaskResult,
-} from "@dev-autopilot/core";
+} from "@devap/core";
 
 /**
  * Claude Agent SDK Adapter
  *
- * 將 dev-autopilot 的 Task 轉換為 Claude Agent SDK 的 query 呼叫。
+ * 將 devap 的 Task 轉換為 Claude Agent SDK 的 query 呼叫。
  */
 export class ClaudeAdapter implements AgentAdapter {
   readonly name: AgentType = "claude";

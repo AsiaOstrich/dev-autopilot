@@ -1,4 +1,4 @@
-# dev-autopilot
+# devap
 
 Agent-agnostic 無人值守開發編排器。Plan → Execute → Review。
 
@@ -58,8 +58,8 @@ class AgentAdapter(ABC):
 packages/core/src/         → orchestrator, task-runner, session-manager, types
 packages/adapter-claude/   → Claude Agent SDK adapter
 packages/adapter-opencode/ → OpenCode SDK adapter
-packages/cli/              → CLI 入口 (dev-autopilot run --plan <file>)
-python/dev_autopilot/      → Python 版（Milestone 2）
+packages/cli/              → CLI 入口 (devap run --plan <file>)
+python/devap/      → Python 版（Milestone 2）
 specs/                     → task-schema.json, report-schema.json, examples/
 skills/                    → CLAUDE.md, AGENTS.md
 docs/research/             → 完整研究文件（本檔案的詳細版）

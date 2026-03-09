@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * dev-autopilot CLI
+ * devap CLI
  *
  * 用法：
- *   dev-autopilot run --plan <file> [--agent claude|opencode] [--dry-run]
+ *   devap run --plan <file> [--agent claude|opencode|cli] [--parallel] [--max-parallel <n>] [--dry-run]
  */
 
 import { readFile } from "node:fs/promises";
@@ -16,14 +16,15 @@ import {
   createDefaultSafetyHook,
   type AgentAdapter,
   type TaskPlan,
-} from "@dev-autopilot/core";
-import { ClaudeAdapter } from "@dev-autopilot/adapter-claude";
-import { OpenCodeAdapter } from "@dev-autopilot/adapter-opencode";
+} from "@devap/core";
+import { ClaudeAdapter } from "@devap/adapter-claude";
+import { OpenCodeAdapter } from "@devap/adapter-opencode";
+import { CliAdapter } from "@devap/adapter-cli";
 
 const program = new Command();
 
 program
-  .name("dev-autopilot")
+  .name("devap")
   .description("Agent-agnostic 無人值守開發編排器")
   .version("0.1.0");
 
@@ -31,9 +32,11 @@ program
   .command("run")
   .description("執行 task plan")
   .requiredOption("--plan <file>", "Task plan JSON 檔案路徑")
-  .option("--agent <type>", "指定 agent（claude 或 opencode）")
+  .option("--agent <type>", "指定 agent（claude、opencode 或 cli）")
+  .option("--parallel", "啟用並行模式（同層 tasks 並行執行）")
+  .option("--max-parallel <n>", "最大並行任務數", parseInt)
   .option("--dry-run", "只驗證 plan + 檢查 adapter 可用性")
-  .action(async (opts: { plan: string; agent?: string; dryRun?: boolean }) => {
+  .action(async (opts: { plan: string; agent?: string; parallel?: boolean; maxParallel?: number; dryRun?: boolean }) => {
     try {
       // 載入 plan
       const planPath = resolve(opts.plan);
@@ -68,11 +71,16 @@ program
         console.log("\n📋 Dry run 完成，以下為 plan 摘要：");
         console.log(`  專案：${plan.project}`);
         console.log(`  任務數：${plan.tasks.length}`);
+        console.log(`  模式：${opts.parallel ? "並行" : "序列"}`);
+        if (opts.maxParallel) {
+          console.log(`  最大並行數：${opts.maxParallel}`);
+        }
         for (const task of plan.tasks) {
           const deps = task.depends_on?.length
             ? ` (依賴：${task.depends_on.join(", ")})`
             : "";
-          console.log(`  - ${task.id}: ${task.title}${deps}`);
+          const judge = task.judge ? " [Judge]" : "";
+          console.log(`  - ${task.id}: ${task.title}${deps}${judge}`);
         }
         return;
       }
@@ -83,12 +91,15 @@ program
       }
 
       // 執行
-      console.log("\n🚀 開始執行...\n");
+      const mode = opts.parallel ? "並行" : "序列";
+      console.log(`\n🚀 開始執行（${mode}模式）...\n`);
       const report = await orchestrate(plan, adapter, {
         cwd: process.cwd(),
         sessionId: plan.session_id,
         onProgress: (msg: string) => console.log(msg),
         safetyHooks: [createDefaultSafetyHook()],
+        parallel: opts.parallel,
+        maxParallel: opts.maxParallel,
       });
 
       // 輸出報告
@@ -125,6 +136,8 @@ function createAdapter(agentType: string): AgentAdapter {
       return new ClaudeAdapter();
     case "opencode":
       return new OpenCodeAdapter();
+    case "cli":
+      return new CliAdapter();
     default:
       throw new Error(`不支援的 agent 類型：${agentType}`);
   }

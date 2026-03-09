@@ -1,4 +1,4 @@
-# dev-autopilot Bootstrap Prompt
+# devap Bootstrap Prompt
 # 
 # 使用方式：
 # 1. clone repo 後，在 repo 根目錄啟動 claude code
@@ -52,7 +52,7 @@
 
 ### Phase G：CLI
 14. 實作 `packages/cli/src/index.ts`：
-    - `dev-autopilot run --plan <file> [--agent claude|opencode]`
+    - `devap run --plan <file> [--agent claude|opencode]`
     - 載入 plan → 建立 adapter → 執行 orchestrator → 輸出報告
 15. 加入 `--dry-run` 模式（只驗證 plan + 檢查 adapter 可用性）
 

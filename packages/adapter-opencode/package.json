@@ -1,7 +1,7 @@
 {
-  "name": "@dev-autopilot/adapter-opencode",
+  "name": "@devap/adapter-opencode",
   "version": "0.1.0",
-  "description": "OpenCode SDK adapter for dev-autopilot",
+  "description": "OpenCode SDK adapter for devap",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.2.16",
-    "@dev-autopilot/core": "workspace:*"
+    "@devap/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

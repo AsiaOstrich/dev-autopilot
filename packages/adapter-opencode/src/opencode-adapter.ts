@@ -14,12 +14,12 @@ import type {
   ExecuteOptions,
   Task,
   TaskResult,
-} from "@dev-autopilot/core";
+} from "@devap/core";
 
 /**
  * OpenCode SDK Adapter
  *
- * 將 dev-autopilot 的 Task 轉換為 OpenCode SDK 的 session.prompt 呼叫。
+ * 將 devap 的 Task 轉換為 OpenCode SDK 的 session.prompt 呼叫。
  */
 export class OpenCodeAdapter implements AgentAdapter {
   readonly name: AgentType = "opencode";

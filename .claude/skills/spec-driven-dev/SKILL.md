@@ -27,6 +27,8 @@ Check for completeness, consistency, and feasibility with stakeholders.
 ### 3. Approve - Sign Off | 核准
 Get stakeholder sign-off before implementation begins.
 
+**核准後提示**：規格已核准。可用 `/plan specs/SPEC-{NNN}-*.md` 生成執行計畫。
+
 ### 4. Implement - Code | 實作
 Develop following the approved spec, referencing requirements and AC.
 

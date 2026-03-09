@@ -1,10 +1,10 @@
 {
-  "name": "@dev-autopilot/cli",
+  "name": "@devap/cli",
   "version": "0.1.0",
-  "description": "CLI entry point for dev-autopilot",
+  "description": "CLI entry point for devap",
   "type": "module",
   "bin": {
-    "dev-autopilot": "dist/index.js"
+    "devap": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -12,9 +12,10 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@dev-autopilot/core": "workspace:*",
-    "@dev-autopilot/adapter-claude": "workspace:*",
-    "@dev-autopilot/adapter-opencode": "workspace:*",
+    "@devap/core": "workspace:*",
+    "@devap/adapter-claude": "workspace:*",
+    "@devap/adapter-opencode": "workspace:*",
+    "@devap/adapter-cli": "workspace:*",
     "commander": "^13.0.0"
   },
   "devDependencies": {

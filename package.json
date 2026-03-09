@@ -1,5 +1,5 @@
 {
-  "name": "dev-autopilot",
+  "name": "devap",
   "private": true,
   "description": "Agent-agnostic unattended development orchestrator",
   "scripts": {

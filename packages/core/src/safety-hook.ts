@@ -1,8 +1,10 @@
 /**
- * Safety Hook — 危險操作攔截
+ * Safety Hook — 危險操作攔截 + 祕密掃描
  *
  * Pre-execution hook，檢查 task spec 和 verify_command 是否包含危險指令。
  * 攔截清單：rm -rf, DROP DATABASE, git push --force, chmod 777, curl|sh, wget|bash
+ *
+ * 祕密掃描：偵測硬編碼的 AWS key、API token、密碼等敏感資訊。
  */
 
 import type { Task, SafetyHook } from "./types.js";
@@ -59,6 +61,46 @@ export function detectDangerousCommand(text: string): string | null {
   }
 
   return null;
+}
+
+/**
+ * 硬編碼祕密模式清單
+ *
+ * 偵測常見的 API key、token、密碼等硬編碼模式。
+ */
+const SECRET_PATTERNS: ReadonlyArray<{ regex: RegExp; description: string }> = [
+  // AWS Access Key ID (AKIA 開頭，20 字元大寫英數)
+  { regex: /AKIA[0-9A-Z]{16}/, description: "AWS Access Key ID" },
+  // AWS Secret Access Key (40 字元 base64-like)
+  { regex: /(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY)\s*[:=]\s*['"]?[A-Za-z0-9/+=]{40}/, description: "AWS Secret Access Key" },
+  // Generic API Key patterns
+  { regex: /(?:api[_-]?key|apikey)\s*[:=]\s*['"]?[A-Za-z0-9_\-]{20,}['"]?/i, description: "API Key" },
+  // Generic Secret/Token patterns
+  { regex: /(?:secret|token|password|passwd|pwd)\s*[:=]\s*['"][^'"]{8,}['"]/i, description: "硬編碼密碼或 token" },
+  // GitHub Personal Access Token (ghp_ 開頭)
+  { regex: /ghp_[A-Za-z0-9]{36}/, description: "GitHub Personal Access Token" },
+  // Slack Token
+  { regex: /xox[bprs]-[A-Za-z0-9\-]+/, description: "Slack Token" },
+  // Private Key
+  { regex: /-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----/, description: "私鑰" },
+];
+
+/**
+ * 檢查文字中是否包含硬編碼祕密
+ *
+ * @param text - 要檢查的文字
+ * @returns 匹配到的祕密描述列表（空陣列表示未偵測到）
+ */
+export function detectHardcodedSecrets(text: string): string[] {
+  const findings: string[] = [];
+
+  for (const { regex, description } of SECRET_PATTERNS) {
+    if (regex.test(text)) {
+      findings.push(`偵測到疑似硬編碼祕密：${description}`);
+    }
+  }
+
+  return findings;
 }
 
 /**

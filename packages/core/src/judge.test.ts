@@ -1,0 +1,260 @@
+/**
+ * Judge Agent 測試
+ *
+ * 測試 Judge 的 prompt 構建與結果解析邏輯。
+ * 實際的 claude -p 呼叫在整合測試中驗證。
+ */
+
+import { describe, it, expect, vi } from "vitest";
+import type { Task, TaskResult } from "./types.js";
+
+// 因為 judge.ts 中使用了 child_process，且核心邏輯（prompt 構建、輸出解析）
+// 是 private function，我們主要測試 runJudge 的整合行為。
+// 此處使用 mock 來避免實際啟動 claude 子進程。
+
+// Mock child_process
+vi.mock("node:child_process", () => {
+  const mockSpawn = vi.fn(() => {
+    const handlers: Record<string, Function> = {};
+    const child = {
+      stdout: {
+        on: vi.fn((event: string, handler: Function) => {
+          handlers[`stdout_${event}`] = handler;
+        }),
+      },
+      stderr: {
+        on: vi.fn((event: string, handler: Function) => {
+          handlers[`stderr_${event}`] = handler;
+        }),
+      },
+      stdin: {
+        write: vi.fn(),
+        end: vi.fn(() => {
+          // 模擬 claude -p 的 JSON 輸出
+          const output = JSON.stringify({
+            type: "result",
+            subtype: "success",
+            session_id: "judge-session-001",
+            cost_usd: 0.1,
+            result: JSON.stringify({
+              verdict: "APPROVE",
+              reasoning: "任務完成，程式碼變更符合規格",
+            }),
+          });
+          // 觸發 stdout data
+          handlers["stdout_data"]?.(Buffer.from(output));
+          // 觸發 close
+          setTimeout(() => handlers["close"]?.(0), 0);
+        }),
+      },
+      on: vi.fn((event: string, handler: Function) => {
+        handlers[event] = handler;
+      }),
+    };
+    return child;
+  });
+
+  return {
+    spawn: mockSpawn,
+    execFile: vi.fn((_cmd: string, _args: string[], _opts: unknown, cb?: Function) => {
+      if (typeof _opts === "function") {
+        cb = _opts;
+      }
+      if (cb) {
+        cb(null, { stdout: "mock diff output\n", stderr: "" });
+      }
+    }),
+  };
+});
+
+describe("shouldRunJudge", () => {
+  // shouldRunJudge 是純函式，不需要 mock
+  // 直接 import 即可（judge.ts 頂層 import 不影響）
+  it("always → 回傳 true", async () => {
+    const { shouldRunJudge } = await import("./judge.js");
+    const task: Task = { id: "T-001", title: "X", spec: "x" };
+    expect(shouldRunJudge("always", task, true)).toBe(true);
+    expect(shouldRunJudge("always", task, false)).toBe(true);
+  });
+
+  it("on_change + hasChanges=true → true", async () => {
+    const { shouldRunJudge } = await import("./judge.js");
+    const task: Task = { id: "T-001", title: "X", spec: "x" };
+    expect(shouldRunJudge("on_change", task, true)).toBe(true);
+  });
+
+  it("on_change + hasChanges=false → false", async () => {
+    const { shouldRunJudge } = await import("./judge.js");
+    const task: Task = { id: "T-001", title: "X", spec: "x" };
+    expect(shouldRunJudge("on_change", task, false)).toBe(false);
+  });
+
+  it("never + task.judge 未設 → false", async () => {
+    const { shouldRunJudge } = await import("./judge.js");
+    const task: Task = { id: "T-001", title: "X", spec: "x" };
+    expect(shouldRunJudge("never", task, true)).toBe(false);
+  });
+
+  it("never + task.judge=true → true（task 層級覆寫）", async () => {
+    const { shouldRunJudge } = await import("./judge.js");
+    const task: Task = { id: "T-001", title: "X", spec: "x", judge: true };
+    expect(shouldRunJudge("never", task, true)).toBe(true);
+  });
+
+  it("always + task.judge=false → false（task 層級關閉）", async () => {
+    const { shouldRunJudge } = await import("./judge.js");
+    const task: Task = { id: "T-001", title: "X", spec: "x", judge: false };
+    expect(shouldRunJudge("always", task, true)).toBe(false);
+  });
+});
+
+describe("buildJudgePrompt", () => {
+  it("無 criteria/intent 時使用基本格式", async () => {
+    const { buildJudgePrompt } = await import("./judge.js");
+    const task: Task = { id: "T-001", title: "基本任務", spec: "做某件事" };
+    const result: TaskResult = { task_id: "T-001", status: "success", duration_ms: 1000 };
+    const prompt = buildJudgePrompt(task, result, "diff", "");
+    expect(prompt).toContain("基本任務");
+    expect(prompt).not.toContain("驗收條件");
+    expect(prompt).not.toContain("使用者意圖");
+    expect(prompt).not.toContain("criteria_results");
+  });
+
+  it("有 acceptance_criteria 時注入到 prompt 並要求逐條判定", async () => {
+    const { buildJudgePrompt } = await import("./judge.js");
+    const task: Task = {
+      id: "T-001",
+      title: "含 criteria 的任務",
+      spec: "實作 API",
+      acceptance_criteria: ["回應 200 狀態碼", "含 JSON body"],
+    };
+    const result: TaskResult = { task_id: "T-001", status: "success", duration_ms: 1000 };
+    const prompt = buildJudgePrompt(task, result, "diff", "");
+    expect(prompt).toContain("驗收條件");
+    expect(prompt).toContain("1. 回應 200 狀態碼");
+    expect(prompt).toContain("2. 含 JSON body");
+    expect(prompt).toContain("criteria_results");
+    expect(prompt).toContain("逐條判定");
+  });
+
+  it("有 user_intent 時注入到 prompt", async () => {
+    const { buildJudgePrompt } = await import("./judge.js");
+    const task: Task = {
+      id: "T-001",
+      title: "含 intent 的任務",
+      spec: "實作搜尋功能",
+      user_intent: "使用者希望快速找到商品",
+    };
+    const result: TaskResult = { task_id: "T-001", status: "success", duration_ms: 1000 };
+    const prompt = buildJudgePrompt(task, result, "diff", "");
+    expect(prompt).toContain("使用者意圖");
+    expect(prompt).toContain("使用者希望快速找到商品");
+    expect(prompt).toContain("intent_assessment");
+  });
+
+  it("同時有 criteria 和 intent 時兩者都注入", async () => {
+    const { buildJudgePrompt } = await import("./judge.js");
+    const task: Task = {
+      id: "T-001",
+      title: "完整任務",
+      spec: "實作搜尋",
+      acceptance_criteria: ["支援關鍵字搜尋"],
+      user_intent: "快速找到商品",
+    };
+    const result: TaskResult = { task_id: "T-001", status: "success", duration_ms: 1000 };
+    const prompt = buildJudgePrompt(task, result, "diff", "");
+    expect(prompt).toContain("驗收條件");
+    expect(prompt).toContain("使用者意圖");
+    expect(prompt).toContain("criteria_results");
+    expect(prompt).toContain("intent_assessment");
+  });
+});
+
+describe("parseJudgeOutput", () => {
+  it("應解析含 criteria_results 的 Judge 輸出", async () => {
+    const { parseJudgeOutput } = await import("./judge.js");
+    const output = JSON.stringify({
+      session_id: "s-001",
+      cost_usd: 0.1,
+      result: JSON.stringify({
+        verdict: "APPROVE",
+        reasoning: "全部通過",
+        criteria_results: [
+          { criteria: "回應 200", passed: true, reasoning: "API 正確回傳" },
+          { criteria: "含 JSON", passed: true, reasoning: "Content-Type 正確" },
+        ],
+        intent_assessment: "完全達成使用者意圖",
+      }),
+    });
+    const result = parseJudgeOutput(output);
+    expect(result.verdict).toBe("APPROVE");
+    expect(result.criteria_results).toHaveLength(2);
+    expect(result.criteria_results![0].passed).toBe(true);
+    expect(result.criteria_results![1].criteria).toBe("含 JSON");
+    expect(result.intent_assessment).toBe("完全達成使用者意圖");
+  });
+
+  it("無 criteria_results 時不包含此欄位", async () => {
+    const { parseJudgeOutput } = await import("./judge.js");
+    const output = JSON.stringify({
+      session_id: "s-002",
+      cost_usd: 0.05,
+      result: JSON.stringify({
+        verdict: "APPROVE",
+        reasoning: "OK",
+      }),
+    });
+    const result = parseJudgeOutput(output);
+    expect(result.verdict).toBe("APPROVE");
+    expect(result.criteria_results).toBeUndefined();
+    expect(result.intent_assessment).toBeUndefined();
+  });
+
+  it("criteria_results 解析失敗時降級為無 criteria", async () => {
+    const { parseJudgeOutput } = await import("./judge.js");
+    const output = JSON.stringify({
+      session_id: "s-003",
+      cost_usd: 0.05,
+      result: '{"verdict": "REJECT", "reasoning": "不符合要求"}',
+    });
+    const result = parseJudgeOutput(output);
+    expect(result.verdict).toBe("REJECT");
+    expect(result.reasoning).toBe("不符合要求");
+    expect(result.criteria_results).toBeUndefined();
+  });
+});
+
+describe("Judge Agent", () => {
+  it("應能匯入 runJudge 函式", async () => {
+    const { runJudge } = await import("./judge.js");
+    expect(runJudge).toBeDefined();
+    expect(typeof runJudge).toBe("function");
+  });
+
+  it("runJudge 應回傳 JudgeResult 結構", async () => {
+    const { runJudge } = await import("./judge.js");
+
+    const task: Task = {
+      id: "T-001",
+      title: "測試任務",
+      spec: "實作一個 hello world 函式",
+      verify_command: "pnpm test",
+    };
+
+    const taskResult: TaskResult = {
+      task_id: "T-001",
+      status: "success",
+      cost_usd: 0.5,
+      duration_ms: 5000,
+    };
+
+    const result = await runJudge(task, taskResult, {
+      cwd: "/tmp/test",
+    });
+
+    expect(result).toBeDefined();
+    expect(result.verdict).toBe("APPROVE");
+    expect(result.reasoning).toBeDefined();
+    expect(typeof result.reasoning).toBe("string");
+  });
+});

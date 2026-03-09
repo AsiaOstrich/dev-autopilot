@@ -1,4 +1,4 @@
-# dev-autopilot 研究與設計文件
+# devap 研究與設計文件
 
 > 研究日期：2026-03-04
 > 狀態：Phase 0 — 研究完成，待實作
@@ -190,7 +190,7 @@ Claude Code 對話 → 產出 session_id
 |--------|------|------|
 | 定位 | Agent-agnostic 通用編排器 | 避免鎖定單一 agent，彈性最大 |
 | 初期支援 | Claude Agent SDK + OpenCode SDK | 一個最成熟，一個模型無關 |
-| Repo 名稱 | `dev-autopilot` | 不含特定 agent 名稱 |
+| Repo 名稱 | `devap` | 不含特定 agent 名稱 |
 | 語言 | TypeScript + Python monorepo | 兩大 AI 生態系主要語言 |
 | 授權 | Apache-2.0 | 專利保護、修改標示（詳見第 11 節） |
 | 套件管理 | pnpm workspace + pyproject.toml | TS 業界標準 + Python 現代標準 |
@@ -200,7 +200,7 @@ Claude Code 對話 → 產出 session_id
 ## 5. Monorepo 結構
 
 ```
-dev-autopilot/
+devap/
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci.yml                    # Lint + Test (TS & Python)
@@ -234,7 +234,7 @@ dev-autopilot/
 │       │   └── index.ts
 │       └── package.json
 ├── python/                            # ── Python packages ──
-│   ├── dev_autopilot/
+│   ├── devap/
 │   │   ├── __init__.py
 │   │   ├── orchestrator.py
 │   │   ├── adapters/
@@ -343,10 +343,10 @@ export interface ExecutionReport {
 ### 6.2 Python — AgentAdapter
 
 ```python
-# python/dev_autopilot/adapters/base.py
+# python/devap/adapters/base.py
 
 from abc import ABC, abstractmethod
-from dev_autopilot.models.task import Task, TaskResult, ExecuteOptions
+from devap.models.task import Task, TaskResult, ExecuteOptions
 
 
 class AgentAdapter(ABC):
@@ -634,7 +634,7 @@ async def permission_callback(tool_name, input_data, context):
 **對 Agent 生態系的意義**：
 - 貢獻者不能事後用專利告使用者（專利反擊條款）
 - Adapter 貢獻需標示修改，利於品質追蹤
-- 防止第三方以 `dev-autopilot` 名義發布未經授權的分發
+- 防止第三方以 `devap` 名義發布未經授權的分發
 
 ### 授權變更可行性（若已有 MIT 版本）
 
@@ -657,7 +657,7 @@ async def permission_callback(tool_name, input_data, context):
 - [ ] 實作 OpenCode SDK adapter（TS）
 - [ ] 實作核心 Orchestrator（dependency resolution + sequential execution）
 - [ ] 實作 Execution Report 產出
-- [ ] CLI 入口（`dev-autopilot run --plan <file>`）
+- [ ] CLI 入口（`devap run --plan <file>`）
 - [ ] 安全守門 Hook（危險操作攔截）
 - [ ] 端到端 POC 測試（小型專案）
 
@@ -718,7 +718,7 @@ async def permission_callback(tool_name, input_data, context):
 
 | 欄位 | 值 |
 |------|---|
-| Repository name | `dev-autopilot` |
+| Repository name | `devap` |
 | Description | Agent-agnostic unattended development orchestrator |
 | Visibility | Private |
 | License | Apache-2.0 |
@@ -774,7 +774,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "dev-autopilot"
+name = "devap"
 version = "0.1.0"
 description = "Agent-agnostic unattended development orchestrator"
 requires-python = ">=3.11"
@@ -789,7 +789,7 @@ dependencies = [
 dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.8", "mypy>=1.13"]
 
 [project.scripts]
-dev-autopilot = "dev_autopilot.__main__:main"
+devap = "devap.__main__:main"
 
 [tool.ruff]
 target-version = "py311"
