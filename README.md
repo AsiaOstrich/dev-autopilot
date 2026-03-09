@@ -1,6 +1,6 @@
 # devap
 
-[繁體中文](README.zh-TW.md)
+[繁體中文](README.zh-TW.md) | [简体中文](README.zh-CN.md)
 
 Agent-agnostic unattended development orchestrator.
 

@@ -1,6 +1,6 @@
 # devap
 
-[English](README.md)
+[English](README.md) | [简体中文](README.zh-CN.md)
 
 Agent 無關的無人值守開發編排器。
 

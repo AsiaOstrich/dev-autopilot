@@ -2,7 +2,7 @@
 name: plan
 version: 1.0.0
 description: |
-  Generate plan.json from Spec documents, OpenSpec changes, or free-text requirements.
+  [DEVAP] Generate plan.json from Spec documents, OpenSpec changes, or free-text requirements.
   Use when: converting specifications into executable task plans for devap.
   Keywords: plan, spec, task plan, 計畫, 規格, 任務, plan.json.
 

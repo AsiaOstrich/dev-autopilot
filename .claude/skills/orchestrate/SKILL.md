@@ -2,7 +2,7 @@
 name: orchestrate
 version: 1.0.0
 description: |
-  Orchestrate multi-task execution plans using devap's DAG engine.
+  [DEVAP] Orchestrate multi-task execution plans using devap's DAG engine.
   Use when: executing a task plan JSON file with parallel/sequential task dependencies.
   Keywords: orchestrate, plan, execute, DAG, task plan, 編排, 執行計畫.
 

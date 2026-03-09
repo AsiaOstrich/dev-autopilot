@@ -1,16 +1,41 @@
 {
-  "name": "@devap/cli",
-  "version": "0.1.0",
-  "description": "CLI entry point for devap",
+  "name": "dev-autopilot",
+  "version": "0.1.1",
+  "description": "Agent-agnostic unattended development orchestrator. Plan → Execute → Review.",
   "type": "module",
   "bin": {
-    "devap": "dist/index.js"
+    "devap": "dist/index.js",
+    "dev-autopilot": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
     "test": "vitest run --passWithNoTests"
   },
+  "keywords": [
+    "devap",
+    "orchestrator",
+    "ai-agent",
+    "claude",
+    "opencode",
+    "automation",
+    "dag",
+    "task-runner",
+    "unattended"
+  ],
+  "author": "AsiaOstrich",
+  "homepage": "https://github.com/AsiaOstrich/dev-autopilot#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AsiaOstrich/dev-autopilot.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/AsiaOstrich/dev-autopilot/issues"
+  },
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "@devap/core": "workspace:*",
     "@devap/adapter-claude": "workspace:*",
