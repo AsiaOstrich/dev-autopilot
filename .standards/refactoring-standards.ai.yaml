@@ -1,0 +1,463 @@
+# Refactoring Standards - AI Optimized
+# Source: core/refactoring-standards.md
+
+id: refactoring-standards
+meta:
+  version: "2.0.0"
+  updated: "2026-01-21"
+  source: core/refactoring-standards.md
+  guide: core/guides/refactoring-guide.md
+  description: Refactoring guidelines with tactical, strategic, and safety strategies including decision matrix
+
+# Refactor vs Rewrite Decision Matrix
+decision_matrix:
+  refactor_when:
+    - Core business logic is sound but code quality is poor
+    - System can be improved incrementally
+    - Team understands the codebase
+    - Tests exist or can be added
+    - Budget/timeline is limited
+  rewrite_when:
+    - Technology stack is obsolete and unsupported
+    - Architecture fundamentally cannot meet requirements
+    - Original team is gone AND no documentation exists
+    - Technical debt exceeds 50% of feature development time
+    - Security vulnerabilities are systemic
+
+# === TACTICAL STRATEGIES (Daily Development) ===
+tactical_strategies:
+  preparatory_refactoring:
+    name: Preparatory Refactoring
+    definition: Restructure code to make upcoming change easier to implement
+    source: Kent Beck
+    quote: "First make the change easy (this might be hard), then make the easy change."
+    when:
+      - Existing architecture resists the feature you need
+      - Code structure needs adjustment for new requirements
+      - Reducing friction for upcoming changes
+    workflow:
+      - Identify the change you want to make
+      - Identify what makes this change difficult
+      - Refactor to make the change easy
+      - Make the (now easy) change
+    principles:
+      - Preparatory refactoring is separate commit from feature
+      - Each step maintains passing tests
+      - Don't combine refactoring with feature work
+
+  boy_scout_rule:
+    name: Boy Scout Rule (Opportunistic Refactoring)
+    definition: Leave code cleaner than you found it
+    source: Robert C. Martin
+    quote: "Leave the campground cleaner than you found it."
+    when:
+      - Any maintenance task
+      - Bug fixes
+      - Feature additions
+      - Fighting software entropy
+    guidelines:
+      - Only small improvements (minutes, not hours)
+      - Don't change behavior
+      - Don't break existing tests
+      - Keep scope within current task
+    examples:
+      - Rename confusingly-named variable
+      - Extract lines into well-named method
+      - Remove dead code
+      - Add clarifying comment
+    antipatterns:
+      - Turning bug fix into major refactoring
+      - Refactoring unrelated code
+      - Changes without test coverage
+      - Scope creep beyond original task
+
+  red_green_refactor:
+    name: Red-Green-Refactor
+    definition: TDD refactoring phase
+    frequency: Daily
+    scope: Individual methods/functions
+    duration: 5-15 minutes per cycle
+    techniques:
+      - Extract Method
+      - Rename Variable
+      - Inline Temp
+      - Replace Temp with Query
+      - Replace Magic Number with Constant
+
+# === STRATEGIC STRATEGIES (Architectural Level) ===
+strategic_strategies:
+  strangler_fig:
+    name: Strangler Fig Pattern
+    definition: Gradually replace legacy by routing functionality to new system
+    origin: Named after strangler fig trees
+    use_when:
+      - Replacing legacy system incrementally
+      - Cannot afford big-bang rewrite
+      - Need to maintain service during migration
+    phases:
+      - phase: INTERCEPT
+        description: Route all traffic through facade to legacy
+      - phase: MIGRATE
+        description: Incrementally route features to new system
+      - phase: COMPLETE
+        description: Decommission legacy when fully migrated
+    risks:
+      - Long transition period
+      - Two systems to maintain
+      - Data synchronization complexity
+
+  anti_corruption_layer:
+    name: Anti-Corruption Layer (ACL)
+    definition: Translation layer preventing legacy model from polluting new system
+    source: Eric Evans, Domain-Driven Design (2003)
+    use_when:
+      - New and legacy systems must coexist and interact
+      - Legacy system has chaotic domain model
+      - Protecting new system's Bounded Context
+    components:
+      facade: Simplifies complex legacy interfaces
+      adapter: Converts legacy data formats to new domain model
+      translator: Maps legacy terminology to ubiquitous language
+    checklist:
+      - Define clear ACL interface
+      - Map legacy entities to new domain model
+      - Handle data format conversions
+      - Implement error translation
+      - Add logging for debugging
+      - Test ACL isolation thoroughly
+    vs_strangler:
+      strangler: Goal is to replace legacy
+      acl: Goal is to coexist with legacy
+
+  branch_by_abstraction:
+    name: Branch by Abstraction
+    use_when:
+      - Replacing implementation within same codebase
+      - Need trunk-based development
+      - Changes are too risky for single commit
+    steps:
+      - Create abstraction layer over existing code
+      - Add new implementation behind abstraction
+      - Switch to new implementation via feature toggle
+      - Remove abstraction and old code
+    advantages:
+      - No feature branches needed
+      - Continuous integration maintained
+      - Can roll back instantly
+
+  expand_contract:
+    name: Expand-Contract (Parallel Change)
+    use_when:
+      - Changing interfaces with many consumers
+      - Database schema migration
+      - Need zero-downtime migration
+    phases:
+      - phase: EXPAND
+        actions:
+          - Add new field/method/table alongside old
+          - Write to both old and new
+          - Safe to rollback at this stage
+      - phase: MIGRATE
+        actions:
+          - Copy data from old to new
+          - Verify data consistency
+          - Start reading from new
+      - phase: CONTRACT
+        actions:
+          - Confirm old is no longer read
+          - Remove old field/method/table
+          - Clean up transition code
+
+# === SAFETY STRATEGIES (Legacy Code) ===
+safety_strategies:
+  legacy_code_dilemma:
+    definition: Legacy code = code without tests (regardless of age)
+    dilemma: Need tests to change safely → Need to change to add tests
+    solution: Use safe techniques to add tests before making changes
+
+  characterization_tests:
+    purpose: Capture EXISTING behavior, not verify correctness
+    steps:
+      - Call the code you want to understand
+      - Write an assertion you expect to fail
+      - Let the test tell you the actual output
+      - Change expected value to match actual
+      - Repeat until you cover needed behavior
+    principle: Document what code DOES, not what it SHOULD do
+
+  scratch_refactoring:
+    definition: Refactor to understand code, discard all changes
+    purpose: Explore undocumented code through hands-on modification
+    workflow:
+      - Create scratch branch (or git stash)
+      - Aggressively refactor to understand
+      - Take notes on learnings
+      - Discard changes (git reset --hard)
+      - Apply learnings to write characterization tests
+    when:
+      - Code too complex to understand by reading
+      - No documentation exists
+      - Need to build mental model quickly
+    principle: Goal is understanding, not clean code
+
+  finding_seams:
+    definition: Points where behavior can be changed without modifying code
+    types:
+      - type: Object Seam
+        description: Replace behavior through polymorphism
+      - type: Preprocessing Seam
+        description: Replace via preprocessor/compiler settings
+      - type: Link Seam
+        description: Replace at link time (DI, module replacement)
+    purpose: Inject test doubles without changing legacy code
+
+  sprout_wrap_techniques:
+    - technique: Sprout Method
+      when: Need to add new functionality to existing method
+      how: Write new function, call it from original method
+    - technique: Sprout Class
+      when: New functionality needs to evolve independently
+      how: Create new class encapsulating new functionality
+    - technique: Wrap Method
+      when: Need to add behavior before/after a method
+      how: Rename original method, new method wraps it
+    - technique: Wrap Class
+      when: Need to decorate existing class
+      how: Decorator Pattern
+      
+  principle: New code uses TDD; legacy untouched until tested
+
+# Database Refactoring
+database_refactoring:
+  common_scenarios:
+    - scenario: Rename column
+      strategy: Add new -> migrate -> drop old
+      risk: Medium
+    - scenario: Split table
+      strategy: New table + FK -> migrate -> update app
+      risk: High
+    - scenario: Merge tables
+      strategy: New table -> merge data -> switch app
+      risk: High
+    - scenario: Change data type
+      strategy: New column -> convert -> switch app
+      risk: Medium
+    - scenario: Add NOT NULL
+      strategy: Fill defaults first -> add constraint
+      risk: Low
+
+  migration_checklist:
+    before:
+      - Data backup complete
+      - Migration script tested in staging
+      - Rollback script prepared
+      - Estimate migration time (consider data volume)
+      - Maintenance window communicated
+    during:
+      - Monitor database performance
+      - Verify data integrity
+      - Application health checks
+    after:
+      - Data consistency verification
+      - Application functionality verified
+      - Performance baseline comparison
+      - Retain backups for period
+
+  zero_downtime_techniques:
+    - name: Online Schema Change
+      tools: [pt-osc, gh-ost]
+      for: MySQL large table changes
+    - name: Blue-Green Database
+      for: High availability requirements
+    - name: Shadow Write
+      for: Verifying migration correctness
+    - name: Feature Flag
+      for: Gradual read source switching
+
+# Safe Refactoring Workflow
+safe_refactoring:
+  before: [Tests pass, Coverage exists (>80%), Understand code, Clean working dir]
+  during: [One change at a time, Test after each, Revert if fail, Commit frequently]
+  after: [Tests pass, Code cleaner, No new features, Documentation updated]
+
+# Metrics
+metrics:
+  code_quality:
+    - metric: Cyclomatic Complexity
+      measurement: Static analysis
+      target: "< 10 per function"
+    - metric: Cognitive Complexity
+      measurement: SonarQube
+      target: Lower is better
+    - metric: Coupling
+      measurement: Module dependencies count
+      target: Reduce dependencies
+    - metric: Code Duplication
+      measurement: Duplicate percentage
+      target: "< 3%"
+
+  test_quality:
+    - metric: Test Coverage
+      target: ">= 80%"
+      note: Should not decrease after refactoring
+    - metric: Test Speed
+      target: Should get faster
+      note: Refactoring improves testability
+    - metric: Flaky Test Count
+      target: Should decrease
+
+  operational:
+    - metric: Deployment Frequency
+      source: CI/CD records
+      expected: Should increase after refactoring
+    - metric: Change Failure Rate
+      source: Rollback count
+      expected: Should decrease
+
+# Team Collaboration
+team_collaboration:
+  pr_size_limits:
+    - size: Small
+      lines: "< 200"
+      review_time: 30 minutes
+    - size: Medium
+      lines: 200-500
+      review_time: 1 hour
+    - size: Large
+      lines: "> 500"
+      action: SHOULD BE SPLIT
+
+  pr_conventions:
+    - Add [Refactor] prefix to title
+    - Explain what changed and why
+    - Include before/after complexity comparison
+    - Must have characterization tests for legacy
+
+# Technical Debt Quadrant
+technical_debt:
+  quadrants:
+    - type: Deliberate + Prudent
+      example: "We know this is debt, but we need to ship"
+      action: Track and schedule repayment
+    - type: Deliberate + Reckless
+      example: "We don't have time for design"
+      action: Avoid; creates long-term problems
+    - type: Inadvertent + Prudent
+      example: "Now we know a better way"
+      action: Natural learning; refactor when touching code
+    - type: Inadvertent + Reckless
+      example: "What's layering?"
+      action: Training needed; systematic cleanup
+
+# Decision Matrix Summary
+decision_matrix_summary:
+  - strategy: Preparatory Refactoring
+    scale: Small
+    risk: Low
+    use: Reduce friction before feature work
+  - strategy: Boy Scout Rule
+    scale: Very Small
+    risk: Low
+    use: Continuous debt repayment
+  - strategy: Red-Green-Refactor
+    scale: Small
+    risk: Low
+    use: TDD development cycle
+  - strategy: Strangler Fig
+    scale: Large
+    risk: Medium
+    use: System replacement
+  - strategy: Anti-Corruption Layer
+    scale: Medium
+    risk: Low
+    use: New-legacy coexistence
+  - strategy: Branch by Abstraction
+    scale: Large
+    risk: Medium
+    use: Long-term refactoring on trunk
+  - strategy: Parallel Change
+    scale: Medium
+    risk: Low
+    use: Interface/schema migration
+  - strategy: Characterization Tests
+    scale: "—"
+    risk: "—"
+    use: Prerequisite for all legacy refactoring
+  - strategy: Scratch Refactoring
+    scale: Small
+    risk: Low
+    use: Understanding black-box code
+
+# Strategy Selection Guide
+strategy_selection:
+  feature_blocked_by_messy_code: Preparatory Refactoring
+  touching_code_during_bug_fix: Boy Scout Rule
+  writing_new_code_with_tdd: Red-Green-Refactor
+  replacing_entire_legacy_system: Strangler Fig
+  integrating_without_pollution: Anti-Corruption Layer
+  refactoring_shared_code_on_trunk: Branch by Abstraction
+  changing_widely_used_interface: Parallel Change
+  working_with_untested_legacy: Characterization Tests + Scratch Refactoring FIRST
+
+# Rules for AI
+rules:
+  - id: test-before-refactor
+    trigger: starting any refactoring
+    instruction: Ensure tests exist and pass before making changes
+    priority: required
+
+  - id: small-steps
+    trigger: during refactoring
+    instruction: Make one small change at a time; run tests after each change
+    priority: required
+
+  - id: no-feature-mixing
+    trigger: refactoring PR
+    instruction: Never mix functional changes with refactoring in the same commit
+    priority: required
+
+  - id: legacy-characterization
+    trigger: refactoring undocumented legacy code
+    instruction: Write characterization tests first to capture existing behavior
+    priority: required
+
+  - id: safe-database-changes
+    trigger: database schema refactoring
+    instruction: Use Expand-Contract pattern for schema changes
+    priority: required
+
+  - id: preparatory-separate
+    trigger: preparatory refactoring
+    instruction: Keep preparatory refactoring in separate commit from feature work
+    priority: required
+
+  - id: boy-scout-scope
+    trigger: opportunistic refactoring
+    instruction: Keep Boy Scout improvements small (minutes, not hours) and within task scope
+    priority: required
+
+  - id: acl-for-integration
+    trigger: integrating with legacy system
+    instruction: Consider Anti-Corruption Layer to prevent legacy pollution
+    priority: recommended
+
+  - id: team-communication
+    trigger: large-scale refactoring
+    instruction: Create refactoring plan document and share with team
+    priority: recommended
+
+  - id: track-metrics
+    trigger: refactoring project
+    instruction: Measure complexity/coupling before and after to prove improvement
+    priority: recommended
+
+  - id: prefer-small-prs
+    trigger: submitting refactoring
+    instruction: Keep PRs under 200 lines; split larger refactorings
+    priority: recommended
+
+related_standards:
+  - test-driven-development.md
+  - testing-standards.md
+  - code-review-checklist.md
+  - checkin-standards.md
