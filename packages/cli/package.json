@@ -1,6 +1,6 @@
 {
   "name": "dev-autopilot",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Agent-agnostic unattended development orchestrator. Plan → Execute → Review.",
   "type": "module",
   "bin": {
@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsup",
     "clean": "rm -rf dist",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "prepublishOnly": "node scripts/copy-skills.js"
   },
   "keywords": [
     "devap",
@@ -34,7 +35,8 @@
     "url": "https://github.com/AsiaOstrich/dev-autopilot/issues"
   },
   "files": [
-    "dist"
+    "dist",
+    "skills"
   ],
   "dependencies": {
     "commander": "^13.0.0"

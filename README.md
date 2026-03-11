@@ -29,30 +29,29 @@ Agent-agnostic unattended development orchestrator.
 
 ## Quick Start
 
-### Option 1: Claude Code Skills (Recommended)
+### Option 1: npm Install (Recommended)
 
-Use devap as Claude Code skills in your target project:
+```bash
+npm install -g dev-autopilot
 
-1. Copy the skills to your project:
-   ```bash
-   cp -r .claude/skills/spec-driven-dev /path/to/your-project/.claude/skills/
-   cp -r .claude/skills/plan /path/to/your-project/.claude/skills/
-   cp -r .claude/skills/orchestrate /path/to/your-project/.claude/skills/
-   ```
+# Install devap skills to your project
+cd my-project
+devap init              # Install 3 skills to ./.claude/skills/
+devap init --force      # Overwrite existing skills
+devap init --target /path/to/project  # Specify target path
+```
 
-2. In Claude Code, run the workflow:
-   ```
-   /sdd <feature-name>        # Create a spec document
-   /plan specs/SPEC-001.md    # Generate plan.json from spec
-   /orchestrate plan.json     # Execute the plan
-   ```
+Then use the skills in Claude Code:
+```
+/sdd <feature-name>        # Create a spec document
+/plan specs/SPEC-001.md    # Generate plan.json from spec
+/orchestrate plan.json     # Execute the plan
+```
 
 ### Option 2: CLI Mode
 
 ```bash
-# Install dependencies
-pnpm install
-pnpm build
+npm install -g dev-autopilot
 
 # Run a task plan
 devap run --plan ./specs/examples/new-project-plan.json
@@ -172,20 +171,17 @@ docs/research/     → Design documents
 
 ## Deploy to Target Project
 
-### Method 1: Copy Skills (Recommended)
-
-Copy the three skills directories to your target project:
+### Method 1: npm Install (Recommended)
 
 ```bash
-# From the devap repo
-cp -r .claude/skills/spec-driven-dev /path/to/target/.claude/skills/
-cp -r .claude/skills/plan /path/to/target/.claude/skills/
-cp -r .claude/skills/orchestrate /path/to/target/.claude/skills/
+npm install -g dev-autopilot
+
+# Install skills to target project
+cd /path/to/target
+devap init
 ```
 
-Then use `/sdd`, `/plan`, and `/orchestrate` in Claude Code within the target project.
-
-### Method 2: CLI with Global Install
+### Method 2: CLI with Global Install (from source)
 
 ```bash
 # Build and link globally
@@ -195,6 +191,7 @@ pnpm -F @devap/cli link --global
 
 # Use from any project
 cd /path/to/target
+devap init
 devap run --plan plan.json --agent cli
 ```
 

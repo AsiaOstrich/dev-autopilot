@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] - 2026-03-11
+
+### Added
+- `devap init` CLI command — one-command installation of devap skills to target project
+  - Installs 3 skills: `plan`, `orchestrate`, `dev-workflow-guide`
+  - `--force` flag to overwrite existing skills
+  - `--target <dir>` to specify target project path
+- `prepublishOnly` script to bundle skills into npm package
+- Unit tests for init command (4 test cases)
+
 ## [0.1.2] - 2026-03-11
 
 ### Added
@@ -32,5 +42,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CLI entry point (`devap run --plan <file>`)
 - Research documentation and feasibility design
 
+[0.1.3]: https://github.com/AsiaOstrich/dev-autopilot/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/AsiaOstrich/dev-autopilot/compare/v0.1.0...v0.1.2
 [0.1.0]: https://github.com/AsiaOstrich/dev-autopilot/releases/tag/v0.1.0

@@ -8,6 +8,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Command } from "commander";
+import { registerInitCommand } from "./commands/init.js";
 import {
   orchestrate,
   validatePlan,
@@ -24,7 +25,7 @@ const program = new Command();
 program
   .name("devap")
   .description("Agent-agnostic 無人值守開發編排器")
-  .version("0.1.2");
+  .version("0.1.3");
 
 program
   .command("run")
@@ -140,5 +141,7 @@ function createAdapter(agentType: string): AgentAdapter {
       throw new Error(`不支援的 agent 類型：${agentType}`);
   }
 }
+
+registerInitCommand(program);
 
 program.parse();

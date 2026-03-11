@@ -29,30 +29,29 @@ Agent 无关的无人值守开发编排器。
 
 ## 快速开始
 
-### 方式一：Claude Code Skill 模式（推荐）
+### 方式一：npm 安装（推荐）
 
-将 devap 的 Skills 部署到目标项目：
+```bash
+npm install -g dev-autopilot
 
-1. 复制 Skills 到你的项目：
-   ```bash
-   cp -r .claude/skills/spec-driven-dev /path/to/your-project/.claude/skills/
-   cp -r .claude/skills/plan /path/to/your-project/.claude/skills/
-   cp -r .claude/skills/orchestrate /path/to/your-project/.claude/skills/
-   ```
+# 将 devap skills 安装到你的项目
+cd my-project
+devap init              # 安装 3 个 skills 到 ./.claude/skills/
+devap init --force      # 强制覆盖已存在的 skills
+devap init --target /path/to/project  # 指定目标路径
+```
 
-2. 在 Claude Code 中执行工作流：
-   ```
-   /sdd <功能名称>              # 创建规格文档
-   /plan specs/SPEC-001.md     # 从规格生成 plan.json
-   /orchestrate plan.json      # 执行计划
-   ```
+然后在 Claude Code 中使用：
+```
+/sdd <功能名称>              # 创建规格文档
+/plan specs/SPEC-001.md     # 从规格生成 plan.json
+/orchestrate plan.json      # 执行计划
+```
 
 ### 方式二：CLI 模式
 
 ```bash
-# 安装依赖
-pnpm install
-pnpm build
+npm install -g dev-autopilot
 
 # 执行任务计划
 devap run --plan ./specs/examples/new-project-plan.json
@@ -172,20 +171,17 @@ docs/research/     → 设计文档
 
 ## 部署到目标项目
 
-### 方式一：复制 Skills（推荐）
-
-将三个 Skills 目录复制到目标项目：
+### 方式一：npm 安装（推荐）
 
 ```bash
-# 从 devap repo
-cp -r .claude/skills/spec-driven-dev /path/to/target/.claude/skills/
-cp -r .claude/skills/plan /path/to/target/.claude/skills/
-cp -r .claude/skills/orchestrate /path/to/target/.claude/skills/
+npm install -g dev-autopilot
+
+# 将 skills 安装到目标项目
+cd /path/to/target
+devap init
 ```
 
-然后在目标项目中使用 Claude Code 的 `/sdd`、`/plan`、`/orchestrate` 指令。
-
-### 方式二：CLI 全局安装
+### 方式二：CLI 全局安装（从源码）
 
 ```bash
 # 构建并全局链接
@@ -195,6 +191,7 @@ pnpm -F @devap/cli link --global
 
 # 在任何项目中使用
 cd /path/to/target
+devap init
 devap run --plan plan.json --agent cli
 ```
 
