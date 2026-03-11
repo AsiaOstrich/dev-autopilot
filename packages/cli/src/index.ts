@@ -13,12 +13,9 @@ import {
   orchestrate,
   validatePlan,
   createDefaultSafetyHook,
-  type AgentAdapter,
   type TaskPlan,
 } from "@devap/core";
-import { ClaudeAdapter } from "@devap/adapter-claude";
-import { OpenCodeAdapter } from "@devap/adapter-opencode";
-import { CliAdapter } from "@devap/adapter-cli";
+import { createAdapter } from "./adapter-factory.js";
 
 const program = new Command();
 
@@ -125,22 +122,6 @@ program
       process.exit(1);
     }
   });
-
-/**
- * 根據 agent 類型建立對應的 adapter
- */
-function createAdapter(agentType: string): AgentAdapter {
-  switch (agentType) {
-    case "claude":
-      return new ClaudeAdapter();
-    case "opencode":
-      return new OpenCodeAdapter();
-    case "cli":
-      return new CliAdapter();
-    default:
-      throw new Error(`不支援的 agent 類型：${agentType}`);
-  }
-}
 
 registerInitCommand(program);
 

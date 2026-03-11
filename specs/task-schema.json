@@ -26,7 +26,12 @@
           "type": "array",
           "items": { "type": "string" }
         },
-        "verify_command": { "type": "string" }
+        "verify_command": { "type": "string" },
+        "test_levels": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/test_level" },
+          "description": "Default multi-level test definitions"
+        }
       }
     },
     "max_parallel": {
@@ -73,7 +78,35 @@
           "user_intent": {
             "type": "string",
             "description": "Why this task is needed — the user's underlying goal"
+          },
+          "test_levels": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/test_level" },
+            "description": "Multi-level test definitions (takes precedence over verify_command)"
           }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "test_level": {
+      "type": "object",
+      "required": ["name", "command"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": ["unit", "integration", "e2e"],
+          "description": "Test level name"
+        },
+        "command": {
+          "type": "string",
+          "description": "Command to execute for this test level"
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "default": 120000,
+          "description": "Timeout in milliseconds (default: 120000)"
         }
       }
     }

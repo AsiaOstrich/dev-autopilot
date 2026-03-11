@@ -151,6 +151,7 @@ export function mergeDefaults(task: Task, plan: TaskPlan): Task {
     max_budget_usd: task.max_budget_usd ?? defaults.max_budget_usd,
     allowed_tools: task.allowed_tools ?? defaults.allowed_tools,
     verify_command: task.verify_command ?? defaults.verify_command,
+    test_levels: task.test_levels ?? defaults.test_levels,
   };
 }
 

@@ -1,13 +1,15 @@
 /**
  * Quality Gate — 品質門檻執行器
  *
- * 依序執行 verify_command → lint_command → type_check_command，
- * 全部通過才視為品質門檻通過。
+ * 支援兩種模式：
+ * 1. 傳統模式：依序執行 verify_command → lint_command → type_check_command
+ * 2. 多層級模式：依序執行 test_levels 定義的多個測試層級
  *
+ * test_levels 優先於 verify_command。全部通過才視為品質門檻通過。
  * 透過回呼函式執行 shell 指令，方便測試 mock。
  */
 
-import type { QualityConfig, Task } from "./types.js";
+import type { QualityConfig, Task, TestLevel } from "./types.js";
 
 /**
  * Quality Gate 檢查結果
@@ -26,7 +28,7 @@ export interface QualityGateResult {
  */
 export interface QualityGateStep {
   /** 步驟名稱 */
-  name: "verify" | "lint" | "type_check";
+  name: "verify" | "lint" | "type_check" | "unit" | "integration" | "e2e";
   /** 執行的指令 */
   command: string;
   /** 是否通過 */
@@ -62,10 +64,14 @@ export interface QualityGateOptions {
 /**
  * 執行品質門檻檢查
  *
- * 依序執行：
- * 1. verify_command（若 task 有設定且 quality.verify 為 true）
- * 2. lint_command（若 quality config 有設定）
- * 3. type_check_command（若 quality config 有設定）
+ * 若 task 有 test_levels 且非空，走多層級模式（取代 verify_command）：
+ *   依序執行每個 test level，第一個失敗即停止。
+ *   之後再執行 lint_command、type_check_command。
+ *
+ * 否則走傳統模式：
+ *   1. verify_command（若 task 有設定且 quality.verify 為 true）
+ *   2. lint_command（若 quality config 有設定）
+ *   3. type_check_command（若 quality config 有設定）
  *
  * 任一步驟失敗即停止，回傳失敗結果。
  *
@@ -81,8 +87,21 @@ export async function runQualityGate(
 ): Promise<QualityGateResult> {
   const steps: QualityGateStep[] = [];
 
-  // 步驟 1：verify_command
-  if (qualityConfig.verify && task.verify_command) {
+  // 判斷走多層級或傳統模式
+  const hasTestLevels = task.test_levels && task.test_levels.length > 0;
+
+  if (hasTestLevels) {
+    // 多層級測試模式：依序執行每個 test level
+    for (const level of task.test_levels!) {
+      options.onProgress?.(`[${task.id}] Quality Gate: ${level.name} → ${level.command}`);
+      const step = await executeStep(level.name, level.command, options);
+      steps.push(step);
+      if (!step.passed) {
+        return buildFailResult(steps, step);
+      }
+    }
+  } else if (qualityConfig.verify && task.verify_command) {
+    // 傳統模式：verify_command
     options.onProgress?.(`[${task.id}] Quality Gate: verify_command → ${task.verify_command}`);
     const step = await executeStep("verify", task.verify_command, options);
     steps.push(step);
@@ -91,7 +110,7 @@ export async function runQualityGate(
     }
   }
 
-  // 步驟 2：lint_command
+  // lint_command（兩種模式都執行）
   if (qualityConfig.lint_command) {
     options.onProgress?.(`[${task.id}] Quality Gate: lint → ${qualityConfig.lint_command}`);
     const step = await executeStep("lint", qualityConfig.lint_command, options);
@@ -101,7 +120,7 @@ export async function runQualityGate(
     }
   }
 
-  // 步驟 3：type_check_command
+  // type_check_command（兩種模式都執行）
   if (qualityConfig.type_check_command) {
     options.onProgress?.(`[${task.id}] Quality Gate: type_check → ${qualityConfig.type_check_command}`);
     const step = await executeStep("type_check", qualityConfig.type_check_command, options);

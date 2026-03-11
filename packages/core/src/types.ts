@@ -8,6 +8,23 @@
 /** 支援的 AI Agent 類型 */
 export type AgentType = "claude" | "opencode" | "codex" | "cline" | "cursor" | "cli";
 
+/** 多層級測試名稱 */
+export type TestLevelName = "unit" | "integration" | "e2e";
+
+/**
+ * 多層級測試定義
+ *
+ * 取代單一 verify_command，支援依序執行多個測試層級。
+ */
+export interface TestLevel {
+  /** 測試層級名稱 */
+  name: TestLevelName;
+  /** 執行指令 */
+  command: string;
+  /** 逾時時間（毫秒），預設 120000 */
+  timeout_ms?: number;
+}
+
 /** Task 執行狀態 */
 export type TaskStatus = "success" | "failed" | "skipped" | "timeout";
 
@@ -44,6 +61,8 @@ export interface Task {
   acceptance_criteria?: string[];
   /** 使用者意圖：為什麼需要這個功能 */
   user_intent?: string;
+  /** 多層級測試定義（優先於 verify_command） */
+  test_levels?: TestLevel[];
 }
 
 /**
@@ -60,6 +79,8 @@ export interface TaskDefaults {
   allowed_tools?: string[];
   /** 預設驗證指令 */
   verify_command?: string;
+  /** 預設多層級測試定義 */
+  test_levels?: TestLevel[];
 }
 
 /**

@@ -8,10 +8,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect, vi } from "vitest";
-import { orchestrate } from "./orchestrator.js";
+import { orchestrate, mergeDefaults } from "./orchestrator.js";
 import { validatePlan } from "./plan-validator.js";
 import { createDefaultSafetyHook } from "./safety-hook.js";
-import type { AgentAdapter, Task, TaskResult, TaskPlan } from "./types.js";
+import type { AgentAdapter, CheckpointAction, Task, TaskResult, TaskPlan, QualityConfig } from "./types.js";
 
 // 載入範例 plan
 const planPath = resolve(import.meta.dirname, "../../../specs/examples/new-project-plan.json");
@@ -164,5 +164,198 @@ describe("端到端測試：new-project-plan.json", () => {
     });
 
     await orchestrate(examplePlan, adapter, { cwd: "/tmp/test" });
+  });
+});
+
+describe("端到端測試：品質模式", () => {
+  it("quality mode 全部成功時應產出 quality_metrics", async () => {
+    const adapter = createSuccessAdapter();
+    const qualityConfig: QualityConfig = {
+      verify: true,
+      judge_policy: "never",
+      max_retries: 0,
+      max_retry_budget_usd: 0,
+    };
+
+    const simplePlan: TaskPlan = {
+      project: "test",
+      tasks: [
+        { id: "T-001", title: "Task 1", spec: "spec 1" },
+        { id: "T-002", title: "Task 2", spec: "spec 2", depends_on: ["T-001"] },
+      ],
+    };
+
+    const report = await orchestrate(simplePlan, adapter, {
+      cwd: "/tmp/test",
+      qualityConfig,
+    });
+
+    expect(report.summary.succeeded).toBe(2);
+    expect(report.quality_metrics).toBeDefined();
+    expect(report.quality_metrics!.verification_pass_rate).toBe(1);
+    expect(report.quality_metrics!.first_pass_rate).toBe(1);
+    expect(report.quality_metrics!.total_retries).toBe(0);
+  });
+});
+
+describe("端到端測試：並行模式", () => {
+  it("無依賴的 tasks 應能並行執行", async () => {
+    const adapter = createSuccessAdapter();
+
+    const parallelPlan: TaskPlan = {
+      project: "parallel-test",
+      tasks: [
+        { id: "T-001", title: "Task A", spec: "Independent A" },
+        { id: "T-002", title: "Task B", spec: "Independent B" },
+        { id: "T-003", title: "Task C", spec: "Depends on A+B", depends_on: ["T-001", "T-002"] },
+      ],
+    };
+
+    const report = await orchestrate(parallelPlan, adapter, {
+      cwd: "/tmp/test",
+      parallel: true,
+    });
+
+    expect(report.summary.total_tasks).toBe(3);
+    expect(report.summary.succeeded).toBe(3);
+    // T-001 和 T-002 在同一層，T-003 在第二層
+    const ids = report.tasks.map((t) => t.task_id);
+    expect(ids).toContain("T-001");
+    expect(ids).toContain("T-002");
+    expect(ids).toContain("T-003");
+  });
+
+  it("maxParallel 限制並行數", async () => {
+    const adapter = createSuccessAdapter();
+
+    const manyTasksPlan: TaskPlan = {
+      project: "max-parallel-test",
+      tasks: [
+        { id: "T-001", title: "A", spec: "a" },
+        { id: "T-002", title: "B", spec: "b" },
+        { id: "T-003", title: "C", spec: "c" },
+      ],
+    };
+
+    const report = await orchestrate(manyTasksPlan, adapter, {
+      cwd: "/tmp/test",
+      parallel: true,
+      maxParallel: 1,
+    });
+
+    expect(report.summary.succeeded).toBe(3);
+  });
+});
+
+describe("端到端測試：checkpoint", () => {
+  it("checkpoint abort 應中止後續任務", async () => {
+    const adapter = createSuccessAdapter();
+
+    const plan: TaskPlan = {
+      project: "checkpoint-test",
+      tasks: [
+        { id: "T-001", title: "A", spec: "a" },
+        { id: "T-002", title: "B", spec: "b", depends_on: ["T-001"] },
+        { id: "T-003", title: "C", spec: "c", depends_on: ["T-002"] },
+      ],
+    };
+
+    const report = await orchestrate(plan, adapter, {
+      cwd: "/tmp/test",
+      checkpointPolicy: "after_each_layer",
+      onCheckpoint: vi.fn(async (): Promise<CheckpointAction> => "abort"),
+    });
+
+    // 第一個 task 完成後 checkpoint abort
+    expect(report.summary.succeeded).toBe(1);
+    expect(report.tasks).toHaveLength(1);
+    expect(report.tasks[0].task_id).toBe("T-001");
+  });
+
+  it("checkpoint continue 應繼續執行", async () => {
+    const adapter = createSuccessAdapter();
+
+    const plan: TaskPlan = {
+      project: "checkpoint-continue",
+      tasks: [
+        { id: "T-001", title: "A", spec: "a" },
+        { id: "T-002", title: "B", spec: "b", depends_on: ["T-001"] },
+      ],
+    };
+
+    const report = await orchestrate(plan, adapter, {
+      cwd: "/tmp/test",
+      checkpointPolicy: "after_each_layer",
+      onCheckpoint: vi.fn(async (): Promise<CheckpointAction> => "continue"),
+    });
+
+    expect(report.summary.succeeded).toBe(2);
+    expect(report.tasks).toHaveLength(2);
+  });
+});
+
+describe("端到端測試：多層級 test_levels", () => {
+  it("mergeDefaults 應合併 test_levels", () => {
+    const plan: TaskPlan = {
+      project: "test",
+      defaults: {
+        test_levels: [
+          { name: "unit", command: "pnpm test:unit" },
+          { name: "integration", command: "pnpm test:integration" },
+        ],
+      },
+      tasks: [{ id: "T-001", title: "A", spec: "a" }],
+    };
+
+    const merged = mergeDefaults(plan.tasks[0], plan);
+    expect(merged.test_levels).toHaveLength(2);
+    expect(merged.test_levels![0].name).toBe("unit");
+  });
+
+  it("task 層級 test_levels 優先於 defaults", () => {
+    const plan: TaskPlan = {
+      project: "test",
+      defaults: {
+        test_levels: [{ name: "unit", command: "pnpm test:unit" }],
+      },
+      tasks: [
+        {
+          id: "T-001",
+          title: "A",
+          spec: "a",
+          test_levels: [{ name: "e2e", command: "pnpm test:e2e" }],
+        },
+      ],
+    };
+
+    const merged = mergeDefaults(plan.tasks[0], plan);
+    expect(merged.test_levels).toHaveLength(1);
+    expect(merged.test_levels![0].name).toBe("e2e");
+  });
+
+  it("含 test_levels 的 plan 應通過驗證", () => {
+    const plan: TaskPlan = {
+      project: "test",
+      defaults: {
+        test_levels: [
+          { name: "unit", command: "pnpm test:unit" },
+        ],
+      },
+      tasks: [
+        {
+          id: "T-001",
+          title: "A",
+          spec: "a",
+          test_levels: [
+            { name: "unit", command: "pnpm test:unit" },
+            { name: "integration", command: "pnpm test:integration" },
+            { name: "e2e", command: "pnpm test:e2e" },
+          ],
+        },
+      ],
+    };
+
+    const result = validatePlan(plan);
+    expect(result.valid).toBe(true);
   });
 });
