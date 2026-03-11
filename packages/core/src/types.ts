@@ -9,7 +9,7 @@
 export type AgentType = "claude" | "opencode" | "codex" | "cline" | "cursor" | "cli";
 
 /** 多層級測試名稱 */
-export type TestLevelName = "unit" | "integration" | "e2e";
+export type TestLevelName = "unit" | "integration" | "system" | "e2e";
 
 /**
  * 多層級測試定義
@@ -23,6 +23,34 @@ export interface TestLevel {
   command: string;
   /** 逾時時間（毫秒），預設 120000 */
   timeout_ms?: number;
+}
+
+/**
+ * 完成準則檢查項目
+ *
+ * 對應 ISO 29119 Test Completion Criteria / Agile DoD。
+ */
+export interface CompletionCheck {
+  /** 檢查項目名稱 */
+  name: string;
+  /** 執行指令（有 command → 自動驗證；無 → 由 Judge 審查） */
+  command?: string;
+  /** 是否為必要檢查（required: true 的失敗即停） */
+  required: boolean;
+}
+
+/**
+ * 測試策略定義
+ *
+ * 連結 UDS test-governance 標準。
+ */
+export interface TestPolicy {
+  /** 金字塔推薦比例（加總應為 100，為經驗值非強制） */
+  pyramid_ratio?: { unit: number; integration: number; system: number; e2e: number };
+  /** 完成準則（ISO 29119 Test Completion Criteria / Agile DoD） */
+  completion_criteria?: CompletionCheck[];
+  /** 靜態分析指令 */
+  static_analysis_command?: string;
 }
 
 /** Task 執行狀態 */
@@ -103,6 +131,8 @@ export interface TaskPlan {
   max_parallel?: number;
   /** 品質設定：profile 名稱或自訂 QualityConfig */
   quality?: QualityProfileName | Partial<QualityConfig>;
+  /** 測試策略定義（連結 UDS test-governance） */
+  test_policy?: TestPolicy;
 }
 
 /**
@@ -307,6 +337,10 @@ export interface QualityConfig {
   max_retries: number;
   /** 單一 task 重試預算上限（美元），超過則停止重試 */
   max_retry_budget_usd: number;
+  /** 靜態分析指令 */
+  static_analysis_command?: string;
+  /** 完成準則（ISO 29119 Test Completion Criteria / Agile DoD） */
+  completion_criteria?: CompletionCheck[];
 }
 
 /**

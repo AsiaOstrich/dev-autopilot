@@ -9,7 +9,7 @@
  * 透過回呼函式執行 shell 指令，方便測試 mock。
  */
 
-import type { QualityConfig, Task, TestLevel } from "./types.js";
+import type { QualityConfig, Task, CompletionCheck } from "./types.js";
 
 /**
  * Quality Gate 檢查結果
@@ -28,7 +28,8 @@ export interface QualityGateResult {
  */
 export interface QualityGateStep {
   /** 步驟名稱 */
-  name: "verify" | "lint" | "type_check" | "unit" | "integration" | "e2e";
+  name: "verify" | "lint" | "type_check" | "static_analysis" | "completion_check"
+       | "unit" | "integration" | "system" | "e2e";
   /** 執行的指令 */
   command: string;
   /** 是否通過 */
@@ -127,6 +128,29 @@ export async function runQualityGate(
     steps.push(step);
     if (!step.passed) {
       return buildFailResult(steps, step);
+    }
+  }
+
+  // static_analysis_command（兩種模式都執行）
+  if (qualityConfig.static_analysis_command) {
+    options.onProgress?.(`[${task.id}] Quality Gate: static_analysis → ${qualityConfig.static_analysis_command}`);
+    const step = await executeStep("static_analysis", qualityConfig.static_analysis_command, options);
+    steps.push(step);
+    if (!step.passed) {
+      return buildFailResult(steps, step);
+    }
+  }
+
+  // completion_criteria（逐項執行有 command 的完成準則）
+  if (qualityConfig.completion_criteria && qualityConfig.completion_criteria.length > 0) {
+    for (const criterion of qualityConfig.completion_criteria) {
+      if (!criterion.command) continue; // 無 command → 由 Judge 審查，跳過
+      options.onProgress?.(`[${task.id}] Quality Gate: completion_check(${criterion.name}) → ${criterion.command}`);
+      const step = await executeStep("completion_check", criterion.command, options);
+      steps.push(step);
+      if (!step.passed && criterion.required) {
+        return buildFailResult(steps, step);
+      }
     }
   }
 

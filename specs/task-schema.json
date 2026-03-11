@@ -86,6 +86,10 @@
           }
         }
       }
+    },
+    "test_policy": {
+      "$ref": "#/definitions/test_policy",
+      "description": "Test policy linking UDS test-governance standards"
     }
   },
   "definitions": {
@@ -95,7 +99,7 @@
       "properties": {
         "name": {
           "type": "string",
-          "enum": ["unit", "integration", "e2e"],
+          "enum": ["unit", "integration", "system", "e2e"],
           "description": "Test level name"
         },
         "command": {
@@ -107,6 +111,48 @@
           "minimum": 1000,
           "default": 120000,
           "description": "Timeout in milliseconds (default: 120000)"
+        }
+      }
+    },
+    "completion_check": {
+      "type": "object",
+      "required": ["name", "required"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Completion check name"
+        },
+        "command": {
+          "type": "string",
+          "description": "Command to execute for automated verification (omit for Judge review)"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether this check is mandatory (failure stops pipeline)"
+        }
+      }
+    },
+    "test_policy": {
+      "type": "object",
+      "properties": {
+        "pyramid_ratio": {
+          "type": "object",
+          "properties": {
+            "unit": { "type": "number" },
+            "integration": { "type": "number" },
+            "system": { "type": "number" },
+            "e2e": { "type": "number" }
+          },
+          "description": "Recommended pyramid ratio (should sum to 100, empirical not mandatory)"
+        },
+        "completion_criteria": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/completion_check" },
+          "description": "Test completion criteria (ISO 29119 / Agile DoD)"
+        },
+        "static_analysis_command": {
+          "type": "string",
+          "description": "Static analysis command"
         }
       }
     }

@@ -285,4 +285,139 @@ describe("runQualityGate — 多層級測試", () => {
     expect(result.steps).toHaveLength(1);
     expect(result.steps[0].name).toBe("unit");
   });
+
+  it("system level 測試通過", async () => {
+    const shell = mockShell({
+      "pnpm test:unit": 0,
+      "pnpm test:system": 0,
+    });
+
+    const task: Task = {
+      id: "T-001",
+      title: "With system test",
+      spec: "test",
+      test_levels: [
+        { name: "unit", command: "pnpm test:unit" },
+        { name: "system", command: "pnpm test:system" },
+      ],
+    };
+
+    const result = await runQualityGate(task, baseQuality, {
+      cwd: "/tmp",
+      shellExecutor: shell,
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.steps).toHaveLength(2);
+    expect(result.steps[0].name).toBe("unit");
+    expect(result.steps[1].name).toBe("system");
+  });
+});
+
+describe("runQualityGate — static_analysis", () => {
+  it("static_analysis_command 通過", async () => {
+    const shell = mockShell({ "pnpm test": 0, "semgrep --config auto .": 0 });
+    const qc: QualityConfig = {
+      ...baseQuality,
+      static_analysis_command: "semgrep --config auto .",
+    };
+    const result = await runQualityGate(baseTask, qc, {
+      cwd: "/tmp",
+      shellExecutor: shell,
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.steps).toHaveLength(2);
+    expect(result.steps[1].name).toBe("static_analysis");
+  });
+
+  it("static_analysis_command 失敗即停", async () => {
+    const shell = mockShell({ "pnpm test": 0, "semgrep --config auto .": 1 });
+    const qc: QualityConfig = {
+      ...baseQuality,
+      static_analysis_command: "semgrep --config auto .",
+    };
+    const result = await runQualityGate(baseTask, qc, {
+      cwd: "/tmp",
+      shellExecutor: shell,
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.feedback).toContain("static_analysis");
+  });
+});
+
+describe("runQualityGate — completion_criteria", () => {
+  it("required completion_criteria 通過", async () => {
+    const shell = mockShell({ "pnpm test": 0, "check-docs": 0 });
+    const qc: QualityConfig = {
+      ...baseQuality,
+      completion_criteria: [
+        { name: "docs_check", command: "check-docs", required: true },
+      ],
+    };
+    const result = await runQualityGate(baseTask, qc, {
+      cwd: "/tmp",
+      shellExecutor: shell,
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.steps).toHaveLength(2);
+    expect(result.steps[1].name).toBe("completion_check");
+  });
+
+  it("required completion_criteria 失敗即停", async () => {
+    const shell = mockShell({ "pnpm test": 0, "check-docs": 1 });
+    const qc: QualityConfig = {
+      ...baseQuality,
+      completion_criteria: [
+        { name: "docs_check", command: "check-docs", required: true },
+      ],
+    };
+    const result = await runQualityGate(baseTask, qc, {
+      cwd: "/tmp",
+      shellExecutor: shell,
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.feedback).toContain("completion_check");
+  });
+
+  it("optional completion_criteria 失敗不停止", async () => {
+    const shell = mockShell({ "pnpm test": 0, "check-optional": 1, "check-required": 0 });
+    const qc: QualityConfig = {
+      ...baseQuality,
+      completion_criteria: [
+        { name: "optional_check", command: "check-optional", required: false },
+        { name: "required_check", command: "check-required", required: true },
+      ],
+    };
+    const result = await runQualityGate(baseTask, qc, {
+      cwd: "/tmp",
+      shellExecutor: shell,
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.steps).toHaveLength(3); // verify + 2 completion checks
+    expect(result.steps[1].passed).toBe(false); // optional failed
+    expect(result.steps[2].passed).toBe(true); // required passed
+  });
+
+  it("無 command 的 completion_criteria 被跳過", async () => {
+    const shell = mockShell({ "pnpm test": 0 });
+    const qc: QualityConfig = {
+      ...baseQuality,
+      completion_criteria: [
+        { name: "judge_review", required: true }, // 無 command，由 Judge 審查
+      ],
+    };
+    const result = await runQualityGate(baseTask, qc, {
+      cwd: "/tmp",
+      shellExecutor: shell,
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.steps).toHaveLength(1); // 只有 verify
+    expect(shell).toHaveBeenCalledTimes(1);
+  });
 });

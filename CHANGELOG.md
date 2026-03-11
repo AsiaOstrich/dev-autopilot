@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Multi-level test support (`test_levels`) — run unit/integration/e2e tests in sequence with short-circuit on failure
+- Claude Adapter unit tests (10 test cases)
+- OpenCode Adapter unit tests (9 test cases)
+- CLI adapter factory tests and plan validation tests (8 test cases)
+- E2E tests for quality mode, parallel mode, checkpoint, and multi-level test scenarios
+- GitHub Actions CI workflow with lint + Node 20/22 test matrix
+- ESLint v9 flat config (`eslint.config.mjs`)
+
+### Changed
+- Quality Gate now supports `test_levels` field (takes precedence over `verify_command`)
+- Extract `createAdapter()` from CLI into standalone `adapter-factory.ts` for testability
+
 ## [0.1.3] - 2026-03-11
 
 ### Added
@@ -42,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CLI entry point (`devap run --plan <file>`)
 - Research documentation and feasibility design
 
+[Unreleased]: https://github.com/AsiaOstrich/dev-autopilot/compare/v0.1.3...HEAD
 [0.1.3]: https://github.com/AsiaOstrich/dev-autopilot/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/AsiaOstrich/dev-autopilot/compare/v0.1.0...v0.1.2
 [0.1.0]: https://github.com/AsiaOstrich/dev-autopilot/releases/tag/v0.1.0

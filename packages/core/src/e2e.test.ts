@@ -359,3 +359,62 @@ describe("端到端測試：多層級 test_levels", () => {
     expect(result.valid).toBe(true);
   });
 });
+
+describe("端到端測試：含 test_policy 的 plan", () => {
+  it("含 test_policy 的完整 plan 應通過驗證並正確執行", async () => {
+    const adapter = createSuccessAdapter();
+
+    const plan: TaskPlan = {
+      project: "test-policy-e2e",
+      test_policy: {
+        pyramid_ratio: { unit: 70, integration: 20, system: 7, e2e: 3 },
+        static_analysis_command: "echo static-ok",
+        completion_criteria: [
+          { name: "docs_check", command: "echo docs-ok", required: true },
+          { name: "judge_review", required: false },
+        ],
+      },
+      quality: "standard",
+      tasks: [
+        {
+          id: "T-001",
+          title: "Task with policy",
+          spec: "Implement feature",
+          test_levels: [
+            { name: "unit", command: "echo unit-ok" },
+            { name: "system", command: "echo system-ok" },
+          ],
+        },
+      ],
+    };
+
+    // 驗證 plan 格式
+    const validation = validatePlan(plan);
+    expect(validation.valid).toBe(true);
+
+    // 執行 orchestration
+    const report = await orchestrate(plan, adapter, {
+      cwd: "/tmp/test",
+    });
+
+    expect(report.summary.total_tasks).toBe(1);
+    expect(report.summary.succeeded).toBe(1);
+  });
+
+  it("test_policy 向後相容：無 test_policy 的 plan 行為不變", async () => {
+    const adapter = createSuccessAdapter();
+
+    const plan: TaskPlan = {
+      project: "no-policy",
+      tasks: [
+        { id: "T-001", title: "Simple task", spec: "Do something" },
+      ],
+    };
+
+    const validation = validatePlan(plan);
+    expect(validation.valid).toBe(true);
+
+    const report = await orchestrate(plan, adapter, { cwd: "/tmp/test" });
+    expect(report.summary.succeeded).toBe(1);
+  });
+});

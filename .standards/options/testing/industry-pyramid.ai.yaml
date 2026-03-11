@@ -1,0 +1,50 @@
+# Industry Testing Pyramid Option
+# Reference: Mike Cohn, Martin Fowler
+
+option:
+  id: industry-pyramid
+  name: Industry Testing Pyramid
+  description: Pragmatic testing pyramid for agile development
+  best_for: Agile development, CI/CD optimization, rapid iteration
+
+  pyramid:
+    ratio: "70/20/7/3"
+    note: "Empirical recommendation by Mike Cohn, not a mandatory standard"
+    levels:
+      - name: Unit Tests
+        percentage: 70
+        characteristics:
+          - Fast (<100ms per test)
+          - Isolated (no external dependencies)
+          - Deterministic
+        tools: [vitest, jest, pytest, go test]
+
+      - name: Integration Tests
+        percentage: 20
+        characteristics:
+          - Test component interactions
+          - May use test containers
+          - Fast feedback (<1s per test)
+        tools: [supertest, testcontainers, pytest-asyncio]
+
+      - name: System Tests
+        percentage: 7
+        characteristics:
+          - Complete subsystem validation
+          - Stubbed external dependencies
+          - Medium speed (<10s per test)
+        tools: [vitest, pytest, custom harness]
+
+      - name: E2E Tests
+        percentage: 3
+        characteristics:
+          - Full user flow validation
+          - Real browser/API interactions
+          - Slow (>10s per test)
+        tools: [playwright, cypress, selenium]
+
+  anti_patterns:
+    - name: Ice Cream Cone
+      description: Too many E2E, too few unit tests
+    - name: Hourglass
+      description: Many unit + E2E but few integration tests

@@ -58,26 +58,40 @@ function isProfileName(value: unknown): value is QualityProfileName {
 export function resolveQualityProfile(plan: TaskPlan): QualityConfig {
   const quality = plan.quality;
 
+  let config: QualityConfig;
+
   // 未設定 → none（向後相容）
   if (quality === undefined) {
-    return { ...QUALITY_PROFILES.none };
+    config = { ...QUALITY_PROFILES.none };
+  } else if (isProfileName(quality)) {
+    // 字串 → profile 展開
+    config = { ...QUALITY_PROFILES[quality] };
+  } else {
+    // 物件 → 以 none 為基底合併
+    const base = { ...QUALITY_PROFILES.none };
+    config = {
+      verify: quality.verify ?? base.verify,
+      lint_command: quality.lint_command ?? base.lint_command,
+      type_check_command: quality.type_check_command ?? base.type_check_command,
+      judge_policy: quality.judge_policy ?? base.judge_policy,
+      max_retries: quality.max_retries ?? base.max_retries,
+      max_retry_budget_usd: quality.max_retry_budget_usd ?? base.max_retry_budget_usd,
+      static_analysis_command: quality.static_analysis_command,
+      completion_criteria: quality.completion_criteria,
+    };
   }
 
-  // 字串 → profile 展開
-  if (isProfileName(quality)) {
-    return { ...QUALITY_PROFILES[quality] };
+  // 合併 test_policy 到 QualityConfig
+  if (plan.test_policy) {
+    if (plan.test_policy.static_analysis_command && !config.static_analysis_command) {
+      config.static_analysis_command = plan.test_policy.static_analysis_command;
+    }
+    if (plan.test_policy.completion_criteria && !config.completion_criteria) {
+      config.completion_criteria = plan.test_policy.completion_criteria;
+    }
   }
 
-  // 物件 → 以 none 為基底合併
-  const base = { ...QUALITY_PROFILES.none };
-  return {
-    verify: quality.verify ?? base.verify,
-    lint_command: quality.lint_command ?? base.lint_command,
-    type_check_command: quality.type_check_command ?? base.type_check_command,
-    judge_policy: quality.judge_policy ?? base.judge_policy,
-    max_retries: quality.max_retries ?? base.max_retries,
-    max_retry_budget_usd: quality.max_retry_budget_usd ?? base.max_retry_budget_usd,
-  };
+  return config;
 }
 
 /**
@@ -100,11 +114,15 @@ export function checkQualityWarnings(
   }
 
   const globalVerify = plan.defaults?.verify_command;
+  const globalTestLevels = plan.defaults?.test_levels;
 
   for (const task of plan.tasks) {
-    if (!task.verify_command && !globalVerify) {
+    const hasVerify = task.verify_command || globalVerify;
+    const hasTestLevels = (task.test_levels && task.test_levels.length > 0) ||
+                          (globalTestLevels && globalTestLevels.length > 0);
+    if (!hasVerify && !hasTestLevels) {
       warnings.push(
-        `Task ${task.id} 缺少 verify_command，但 quality profile 要求驗證。建議加上驗證指令或在 defaults 中設定。`,
+        `Task ${task.id} 缺少 verify_command 和 test_levels，但 quality profile 要求驗證。建議加上驗證指令或在 defaults 中設定。`,
       );
     }
   }

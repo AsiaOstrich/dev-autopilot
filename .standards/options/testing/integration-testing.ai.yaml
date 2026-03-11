@@ -1,0 +1,35 @@
+# Integration Testing Option
+# Reference: ISTQB Integration Testing, ISO 12207
+
+option:
+  id: integration-testing
+  name: Integration Testing
+  description: Guidelines for testing component interactions
+  pyramid_level: Integration Tests (IT)
+  pyramid_ratio: 20
+
+  scope:
+    - API endpoint handlers with middleware
+    - Database queries with real/containerized DB
+    - Service-to-service communication
+    - Message queue producer/consumer pairs
+
+  strategies:
+    - name: Big-bang
+      description: Integrate all components at once
+      risk: Hard to isolate failures
+    - name: Top-down
+      description: Start from UI/API layer, stub lower layers
+      advantage: Early validation of user-facing behavior
+    - name: Bottom-up
+      description: Start from data layer, build up
+      advantage: Solid foundation, easy to test
+
+  techniques:
+    - Testcontainers for database/cache dependencies
+    - In-process HTTP testing (supertest, httpx)
+    - Contract testing for API boundaries
+
+  devap_mapping:
+    test_level_name: integration
+    example_command: "pnpm vitest run src/**/*.integration.test.ts"

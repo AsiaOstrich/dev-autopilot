@@ -1,0 +1,38 @@
+# E2E Testing Option
+# Reference: ISTQB Acceptance Testing
+
+option:
+  id: e2e-testing
+  name: E2E Testing
+  description: Guidelines for full end-to-end user flow testing
+  pyramid_level: E2E Tests
+  pyramid_ratio: 3
+
+  scope:
+    - Complete user journey validation
+    - Cross-system integration verification
+    - Real browser/API interactions
+    - Production-like environment testing
+
+  characteristics:
+    - Tests the entire system from user perspective
+    - No mocks — real external services
+    - Slow execution (>10s per test)
+    - Highest confidence, highest cost
+
+  strategies:
+    - name: Happy Path First
+      description: Cover critical user journeys before edge cases
+    - name: Smoke Tests
+      description: Minimal set verifying system is operational
+    - name: Critical Path
+      description: Test flows that generate revenue or are legally required
+
+  tools:
+    - Playwright (recommended for web)
+    - Cypress
+    - Selenium
+
+  devap_mapping:
+    test_level_name: e2e
+    example_command: "pnpm playwright test"

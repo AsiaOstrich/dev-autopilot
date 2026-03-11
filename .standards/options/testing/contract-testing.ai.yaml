@@ -1,0 +1,27 @@
+# Contract Testing Option
+# Reference: Consumer-Driven Contracts (Pact)
+
+option:
+  id: contract-testing
+  name: Contract Testing
+  description: Guidelines for API contract testing between services
+  best_for: Microservices, API integrations, distributed systems
+
+  approach:
+    - name: Consumer-Driven Contracts
+      description: Consumer defines expected interactions, provider verifies
+      tools: [Pact, Spring Cloud Contract]
+    - name: Provider-Driven Contracts
+      description: Provider publishes API schema, consumers validate
+      tools: [OpenAPI/Swagger, GraphQL Schema]
+
+  workflow:
+    - Consumer writes contract tests defining expected API behavior
+    - Contract is published to a broker
+    - Provider runs verification against the contract
+    - Both sides must pass before deployment
+
+  devap_mapping:
+    note: "Contract tests typically run at integration level"
+    test_level_name: integration
+    example_command: "pnpm vitest run src/**/*.contract.test.ts"

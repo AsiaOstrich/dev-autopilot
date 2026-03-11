@@ -162,4 +162,90 @@ describe("validatePlan", () => {
       expect(result.errors.some((e) => e.includes("循環"))).toBe(true);
     });
   });
+
+  describe("system level 驗證", () => {
+    it("應接受含 system level 的 test_levels", () => {
+      const result = validatePlan({
+        project: "test",
+        tasks: [
+          {
+            id: "T-001",
+            title: "A",
+            spec: "X",
+            test_levels: [
+              { name: "unit", command: "pnpm test:unit" },
+              { name: "system", command: "pnpm test:system" },
+            ],
+          },
+        ],
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it("應接受 defaults 中含 system level 的 test_levels", () => {
+      const result = validatePlan({
+        project: "test",
+        defaults: {
+          test_levels: [
+            { name: "unit", command: "pnpm test:unit" },
+            { name: "system", command: "pnpm test:system" },
+          ],
+        },
+        tasks: [
+          { id: "T-001", title: "A", spec: "X" },
+        ],
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it("應接受含 4 層完整 test_levels", () => {
+      const result = validatePlan({
+        project: "test",
+        tasks: [
+          {
+            id: "T-001",
+            title: "A",
+            spec: "X",
+            test_levels: [
+              { name: "unit", command: "pnpm test:unit" },
+              { name: "integration", command: "pnpm test:integration" },
+              { name: "system", command: "pnpm test:system" },
+              { name: "e2e", command: "pnpm test:e2e" },
+            ],
+          },
+        ],
+      });
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe("test_policy schema 驗證", () => {
+    it("應接受含 test_policy 的 plan", () => {
+      const result = validatePlan({
+        project: "test",
+        test_policy: {
+          pyramid_ratio: { unit: 70, integration: 20, system: 7, e2e: 3 },
+          static_analysis_command: "semgrep --config auto .",
+          completion_criteria: [
+            { name: "docs_check", command: "check-docs", required: true },
+            { name: "judge_review", required: false },
+          ],
+        },
+        tasks: [
+          { id: "T-001", title: "A", spec: "X" },
+        ],
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it("應接受無 test_policy 的 plan（向後相容）", () => {
+      const result = validatePlan({
+        project: "test",
+        tasks: [
+          { id: "T-001", title: "A", spec: "X" },
+        ],
+      });
+      expect(result.valid).toBe(true);
+    });
+  });
 });

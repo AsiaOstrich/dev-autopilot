@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DevAutopilot Test Policy",
+  "description": "Test policy definition linking UDS test-governance standards. Can be used by UDS CLI and other external tools.",
+  "type": "object",
+  "properties": {
+    "pyramid_ratio": {
+      "type": "object",
+      "properties": {
+        "unit": { "type": "number", "minimum": 0, "maximum": 100 },
+        "integration": { "type": "number", "minimum": 0, "maximum": 100 },
+        "system": { "type": "number", "minimum": 0, "maximum": 100 },
+        "e2e": { "type": "number", "minimum": 0, "maximum": 100 }
+      },
+      "description": "Recommended pyramid ratio (should sum to 100, empirical not mandatory)"
+    },
+    "completion_criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "required"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Completion check name"
+          },
+          "command": {
+            "type": "string",
+            "description": "Command to execute for automated verification (omit for Judge review)"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "Whether this check is mandatory (failure stops pipeline)"
+          }
+        }
+      },
+      "description": "Test completion criteria (ISO 29119 Test Completion Criteria / Agile DoD)"
+    },
+    "static_analysis_command": {
+      "type": "string",
+      "description": "Static analysis command to run"
+    }
+  }
+}

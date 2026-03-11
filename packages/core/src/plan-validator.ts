@@ -32,6 +32,45 @@ const taskSchema = {
         max_budget_usd: { type: "number", default: 2.0 },
         allowed_tools: { type: "array", items: { type: "string" } },
         verify_command: { type: "string" },
+        test_levels: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["name", "command"],
+            properties: {
+              name: { type: "string", enum: ["unit", "integration", "system", "e2e"] },
+              command: { type: "string" },
+              timeout_ms: { type: "integer", minimum: 1000, default: 120000 },
+            },
+          },
+        },
+      },
+    },
+    test_policy: {
+      type: "object",
+      properties: {
+        pyramid_ratio: {
+          type: "object",
+          properties: {
+            unit: { type: "number" },
+            integration: { type: "number" },
+            system: { type: "number" },
+            e2e: { type: "number" },
+          },
+        },
+        completion_criteria: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["name", "required"],
+            properties: {
+              name: { type: "string" },
+              command: { type: "string" },
+              required: { type: "boolean" },
+            },
+          },
+        },
+        static_analysis_command: { type: "string" },
       },
     },
     max_parallel: {
@@ -60,6 +99,24 @@ const taskSchema = {
           allowed_tools: { type: "array", items: { type: "string" } },
           fork_session: { type: "boolean", default: true },
           judge: { type: "boolean", description: "Enable Judge Agent review for this task" },
+          acceptance_criteria: {
+            type: "array",
+            items: { type: "string" },
+            description: "Acceptance criteria list",
+          },
+          user_intent: { type: "string", description: "Why this task is needed" },
+          test_levels: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["name", "command"],
+              properties: {
+                name: { type: "string", enum: ["unit", "integration", "system", "e2e"] },
+                command: { type: "string" },
+                timeout_ms: { type: "integer", minimum: 1000, default: 120000 },
+              },
+            },
+          },
         },
       },
     },

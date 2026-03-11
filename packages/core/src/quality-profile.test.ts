@@ -117,4 +117,96 @@ describe("checkQualityWarnings", () => {
     };
     expect(checkQualityWarnings(plan, config)).toEqual([]);
   });
+
+  it("verify=true + task 有 test_levels → 無警告", () => {
+    const plan = makePlan({
+      tasks: [
+        {
+          id: "T-001", title: "A", spec: "do A",
+          test_levels: [{ name: "unit" as const, command: "pnpm test:unit" }],
+        },
+      ],
+    });
+    const config: QualityConfig = {
+      verify: true, judge_policy: "never", max_retries: 0, max_retry_budget_usd: 0,
+    };
+    expect(checkQualityWarnings(plan, config)).toEqual([]);
+  });
+
+  it("verify=true + defaults 有 test_levels → 無警告", () => {
+    const plan = makePlan({
+      defaults: {
+        test_levels: [{ name: "unit" as const, command: "pnpm test:unit" }],
+      },
+      tasks: [
+        { id: "T-001", title: "A", spec: "do A" },
+      ],
+    });
+    const config: QualityConfig = {
+      verify: true, judge_policy: "never", max_retries: 0, max_retry_budget_usd: 0,
+    };
+    expect(checkQualityWarnings(plan, config)).toEqual([]);
+  });
+
+  it("verify=true + 無 verify_command 也無 test_levels → 產生警告（含 test_levels 提示）", () => {
+    const plan = makePlan({
+      tasks: [
+        { id: "T-001", title: "A", spec: "do A" },
+      ],
+    });
+    const config: QualityConfig = {
+      verify: true, judge_policy: "never", max_retries: 0, max_retry_budget_usd: 0,
+    };
+    const warnings = checkQualityWarnings(plan, config);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("T-001");
+    expect(warnings[0]).toContain("test_levels");
+  });
+});
+
+describe("resolveQualityProfile — test_policy 合併", () => {
+  it("test_policy.static_analysis_command 合併到 QualityConfig", () => {
+    const plan = makePlan({
+      quality: "standard",
+      test_policy: {
+        static_analysis_command: "semgrep --config auto .",
+      },
+    });
+    const config = resolveQualityProfile(plan);
+    expect(config.static_analysis_command).toBe("semgrep --config auto .");
+  });
+
+  it("test_policy.completion_criteria 合併到 QualityConfig", () => {
+    const plan = makePlan({
+      quality: "standard",
+      test_policy: {
+        completion_criteria: [
+          { name: "docs_check", command: "check-docs", required: true },
+        ],
+      },
+    });
+    const config = resolveQualityProfile(plan);
+    expect(config.completion_criteria).toHaveLength(1);
+    expect(config.completion_criteria![0].name).toBe("docs_check");
+  });
+
+  it("quality 物件的 static_analysis_command 優先於 test_policy", () => {
+    const plan = makePlan({
+      quality: {
+        verify: true,
+        static_analysis_command: "eslint .",
+      },
+      test_policy: {
+        static_analysis_command: "semgrep .",
+      },
+    });
+    const config = resolveQualityProfile(plan);
+    expect(config.static_analysis_command).toBe("eslint .");
+  });
+
+  it("無 test_policy → QualityConfig 不含額外欄位", () => {
+    const config = resolveQualityProfile(makePlan({ quality: "strict" }));
+    expect(config.static_analysis_command).toBeUndefined();
+    expect(config.completion_criteria).toBeUndefined();
+  });
 });
