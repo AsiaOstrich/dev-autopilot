@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /**
  * devap CLI
  *
@@ -26,7 +24,7 @@ const program = new Command();
 program
   .name("devap")
   .description("Agent-agnostic 無人值守開發編排器")
-  .version("0.1.0");
+  .version("0.1.2");
 
 program
   .command("run")

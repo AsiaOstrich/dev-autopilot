@@ -116,9 +116,9 @@ AI 助手應以繁體中文回覆使用者的問題與請求。
 ---
 
 <!-- UDS:STANDARDS:START -->
-## 提交訊息語言
-使用**雙語**格式撰寫提交訊息（英文 + 繁體中文）。
-格式：`<type>(<scope>): <English>. <中文>.`
+## Commit Message Language
+Write commit messages in **bilingual** format (English + 繁體中文).
+Format: `<type>(<scope>): <English>. <中文>.`
 
 ## Standards Compliance Instructions
 
@@ -126,18 +126,21 @@ AI 助手應以繁體中文回覆使用者的問題與請求。
 | Task | Standard | When |
 |------|----------|------|
 | Project context | [project-context-memory.ai.yaml](.standards/project-context-memory.ai.yaml) | Planning & Coding |
+| Writing commits | [commit-message.ai.yaml](.standards/commit-message.ai.yaml) | Every commit |
 
 **SHOULD follow** (相關任務時參考):
 | Task | Standard | When |
 |------|----------|------|
 | Developer memory | [developer-memory.ai.yaml](.standards/developer-memory.ai.yaml) | Always (protocol) |
+| Git workflow | [git-workflow.ai.yaml](.standards/git-workflow.ai.yaml) | Branch/merge decisions |
+| Writing tests | [testing.ai.yaml](.standards/testing.ai.yaml) | When creating tests |
 
 
 ## Installed Standards Index
 
-本專案採用 **Level 3** 標準。所有規範位於 `.standards/`：
+本專案採用 UDS 標準。所有規範位於 `.standards/`：
 
-### Core (9 standards)
+### Core (35 standards)
 - `deployment-standards.ai.yaml` - deployment-standards.ai.yaml
 - `documentation-writing-standards.ai.yaml` - documentation-writing-standards.ai.yaml
 - `ai-agreement-standards.ai.yaml` - ai-agreement-standards.ai.yaml
@@ -147,7 +150,32 @@ AI 助手應以繁體中文回覆使用者的問題與請求。
 - `accessibility-standards.ai.yaml` - accessibility-standards.ai.yaml
 - `developer-memory.ai.yaml` - 開發者持久記憶
 - `project-context-memory.ai.yaml` - 專案情境記憶
-
+- `anti-hallucination.ai.yaml` - anti-hallucination.ai.yaml
+- `ai-friendly-architecture.ai.yaml` - ai-friendly-architecture.ai.yaml
+- `commit-message.ai.yaml` - 提交訊息格式
+- `checkin-standards.ai.yaml` - checkin-standards.ai.yaml
+- `spec-driven-development.ai.yaml` - spec-driven-development.ai.yaml
+- `code-review.ai.yaml` - code-review.ai.yaml
+- `git-workflow.ai.yaml` - Git 工作流程
+- `versioning.ai.yaml` - versioning.ai.yaml
+- `changelog.ai.yaml` - changelog.ai.yaml
+- `testing.ai.yaml` - 測試標準
+- `documentation-structure.ai.yaml` - documentation-structure.ai.yaml
+- `ai-instruction-standards.ai.yaml` - ai-instruction-standards.ai.yaml
+- `project-structure.ai.yaml` - project-structure.ai.yaml
+- `error-codes.ai.yaml` - error-codes.ai.yaml
+- `logging.ai.yaml` - logging.ai.yaml
+- `test-completeness-dimensions.ai.yaml` - test-completeness-dimensions.ai.yaml
+- `test-driven-development.ai.yaml` - test-driven-development.ai.yaml
+- `behavior-driven-development.ai.yaml` - behavior-driven-development.ai.yaml
+- `acceptance-test-driven-development.ai.yaml` - acceptance-test-driven-development.ai.yaml
+- `reverse-engineering-standards.ai.yaml` - reverse-engineering-standards.ai.yaml
+- `forward-derivation-standards.ai.yaml` - forward-derivation-standards.ai.yaml
+- `refactoring-standards.ai.yaml` - refactoring-standards.ai.yaml
+- `requirement-engineering.ai.yaml` - requirement-engineering.ai.yaml
+- `requirement-checklist.md` - requirement-checklist.md
+- `requirement-template.md` - requirement-template.md
+- `requirement-document-template.md` - requirement-document-template.md
 <!-- UDS:STANDARDS:END -->
 
 ---

@@ -1,6 +1,6 @@
 {
   "name": "dev-autopilot",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Agent-agnostic unattended development orchestrator. Plan → Execute → Review.",
   "type": "module",
   "bin": {
@@ -8,7 +8,7 @@
     "dev-autopilot": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsup",
     "clean": "rm -rf dist",
     "test": "vitest run --passWithNoTests"
   },
@@ -37,13 +37,14 @@
     "dist"
   ],
   "dependencies": {
-    "@devap/core": "workspace:*",
-    "@devap/adapter-claude": "workspace:*",
-    "@devap/adapter-opencode": "workspace:*",
-    "@devap/adapter-cli": "workspace:*",
     "commander": "^13.0.0"
   },
   "devDependencies": {
+    "@devap/adapter-claude": "workspace:*",
+    "@devap/adapter-cli": "workspace:*",
+    "@devap/adapter-opencode": "workspace:*",
+    "@devap/core": "workspace:*",
+    "tsup": "^8.5.1",
     "typescript": "^5.6.0",
     "vitest": "^2.0.0"
   },
