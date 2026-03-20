@@ -5,10 +5,10 @@
 **UDS** 定義規格與測試標準（「什麼是品質」），**devap** 執行 UDS 生成的規格與測試（「如何驗證品質」）。目前兩者缺乏正式銜接：
 
 - UDS `testing.ai.yaml` 金字塔定義不一致（`pyramid` 寫 70/20/10 三層，`rules` 寫 70/20/7/3 四層）
-- UDS 引用的 9 個 `options/testing/*.ai.yaml` 全部不存在
+- ~~UDS 引用的 9 個 `options/testing/*.ai.yaml` 全部不存在~~ ✅ 已修復（UDS 上游已補齊 9 個檔案，DevAP 已同步）
 - UDS 缺少 Test Policy、Test Completion Criteria、Test Plan/Case 模板
-- devap `TestLevelName` 只有 3 層（unit/integration/e2e），缺少 system
-- devap `QualityConfig` 缺少靜態分析、完成準則檢查
+- ~~devap `TestLevelName` 只有 3 層（unit/integration/e2e），缺少 system~~ ✅ 已修復（新增 `"system"` 至 `TestLevelName`）
+- ~~devap `QualityConfig` 缺少靜態分析、完成準則檢查~~ ✅ 已修復（新增 `CompletionCheck`、`TestPolicy`）
 
 本計畫基於以下標準建立兩者的完整銜接：
 
