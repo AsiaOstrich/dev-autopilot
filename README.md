@@ -232,7 +232,7 @@ UDS (What to do) → DevAP (How agents do it) → VibeOps (Full lifecycle)
 | Layer | Product | Role | License |
 |-------|---------|------|---------|
 | Standards | [UDS](https://github.com/AsiaOstrich/universal-dev-standards) | Development methodology framework | MIT + CC BY 4.0 |
-| Orchestration | **DevAP** | Agent-agnostic orchestration engine | Apache-2.0 |
+| Orchestration | **DevAP** | Agent-agnostic orchestration engine | MIT |
 | Lifecycle | [VibeOps](https://github.com/AsiaOstrich/vibeops360) | AI-driven software factory | AGPL-3.0-only |
 
 - **UDS** defines *what* standards to follow → DevAP consumes UDS standards for quality gates
@@ -243,4 +243,4 @@ The `AgentAdapter` interface is the primary integration point. VibeOps implement
 
 ## License
 
-[Apache-2.0](LICENSE)
+[MIT](LICENSE)

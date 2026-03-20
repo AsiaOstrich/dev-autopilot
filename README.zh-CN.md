@@ -223,4 +223,4 @@ Python 支持安排在未来的 milestone。详情请参阅 [CLAUDE.md](CLAUDE.m
 
 ## 许可证
 
-[Apache-2.0](LICENSE)
+[MIT](LICENSE)

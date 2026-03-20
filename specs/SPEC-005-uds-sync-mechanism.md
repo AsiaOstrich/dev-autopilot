@@ -50,5 +50,5 @@ manifest.json 中 `skills.version` 應與 `upstream.version` 一致。
 ## 決策記錄
 
 - **維持分離 repo**：UDS 有獨立消費者生態，不與 DevAP 合併
-- **維持 Apache-2.0**：patent grant 保護，與上下游授權相容
+- **維持 MIT**：簡潔寬鬆，與 UDS 授權一致
 - **copy-once + 版本檢查**：短期最小改動，中期遷移 npm 依賴

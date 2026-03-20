@@ -7,7 +7,7 @@ name = "devap"
 version = "0.1.0"
 description = "Agent-agnostic unattended development orchestrator"
 requires-python = ">=3.11"
-license = "Apache-2.0"
+license = "MIT"
 dependencies = [
     "claude-agent-sdk>=0.1.0",
     "pydantic>=2.0",

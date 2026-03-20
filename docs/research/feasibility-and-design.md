@@ -2,7 +2,7 @@
 
 > 研究日期：2026-03-04
 > 狀態：Phase 0 — 研究完成，待實作
-> 授權：Apache-2.0
+> 授權：MIT
 
 ---
 
@@ -192,7 +192,7 @@ Claude Code 對話 → 產出 session_id
 | 初期支援 | Claude Agent SDK + OpenCode SDK | 一個最成熟，一個模型無關 |
 | Repo 名稱 | `devap` | 不含特定 agent 名稱 |
 | 語言 | TypeScript + Python monorepo | 兩大 AI 生態系主要語言 |
-| 授權 | Apache-2.0 | 專利保護、修改標示（詳見第 11 節） |
+| 授權 | MIT | 簡潔寬鬆，與 UDS 一致（詳見第 11 節） |
 | 套件管理 | pnpm workspace + pyproject.toml | TS 業界標準 + Python 現代標準 |
 
 ---
@@ -275,7 +275,7 @@ devap/
 ├── package.json                       # Monorepo root
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
-├── LICENSE                            # Apache-2.0
+├── LICENSE                            # MIT
 └── README.md
 ```
 
@@ -622,27 +622,12 @@ async def permission_callback(tool_name, input_data, context):
 
 ## 11. 授權選擇
 
-### 為何選 Apache-2.0（而非 MIT）
+### 授權選擇：MIT
 
-| 面向 | MIT | Apache-2.0 |
-|------|-----|-----------|
-| 專利授權 | ❌ 未明確 | ✅ 貢獻者自動授予專利許可 |
-| 修改標示 | ❌ 無要求 | ✅ 修改須標示（利於除錯） |
-| 商標保護 | ❌ 無 | ✅ 防止未授權使用專案名 |
-| 業界先例 | 小型專案 | Kubernetes, TensorFlow, OpenTelemetry |
+選擇 MIT 授權，理由：
 
-**對 Agent 生態系的意義**：
-- 貢獻者不能事後用專利告使用者（專利反擊條款）
-- Adapter 貢獻需標示修改，利於品質追蹤
-- 防止第三方以 `devap` 名義發布未經授權的分發
-
-### 授權變更可行性（若已有 MIT 版本）
-
-- 唯一貢獻者：✅ 零風險，直接改
-- 有外部貢獻者：需每位同意，或透過 CLA 預先授權
-- 舊版本授權不變：已發布的 MIT 版本永久有效
-
-**建議**：新 repo 直接用 Apache-2.0，避免日後變更成本。
+- **簡潔寬鬆**：條款簡短易懂，對使用者與貢獻者無額外負擔
+- **與 UDS 一致**：UDS 同樣採用 MIT，上下游授權統一，減少整合摩擦
 
 ---
 
@@ -721,7 +706,7 @@ async def permission_callback(tool_name, input_data, context):
 | Repository name | `devap` |
 | Description | Agent-agnostic unattended development orchestrator |
 | Visibility | Private |
-| License | Apache-2.0 |
+| License | MIT |
 | Default branch | `main` |
 
 ### Topics
@@ -778,7 +763,7 @@ name = "devap"
 version = "0.1.0"
 description = "Agent-agnostic unattended development orchestrator"
 requires-python = ">=3.11"
-license = "Apache-2.0"
+license = "MIT"
 dependencies = [
     "claude-agent-sdk>=0.1.0",
     "pydantic>=2.0",

@@ -39,4 +39,4 @@ devap run --plan plan.json --agent cli --parallel --dry-run
 
 ## License
 
-[Apache-2.0](https://github.com/AsiaOstrich/dev-autopilot/blob/main/LICENSE)
+[MIT](https://github.com/AsiaOstrich/dev-autopilot/blob/main/LICENSE)

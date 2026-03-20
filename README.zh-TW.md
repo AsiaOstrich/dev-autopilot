@@ -223,4 +223,4 @@ Python 支援排定在未來的 milestone。詳情請參閱 [CLAUDE.md](CLAUDE.m
 
 ## 授權
 
-[Apache-2.0](LICENSE)
+[MIT](LICENSE)
