@@ -236,6 +236,57 @@ devap + UDS 已覆蓋 AI QA 自動化架構的完整鏈路：
 
 ---
 
+## Part D: VibeOps 消費者視角
+
+### D1. VibeOps Builder Agent 消費 DevAP TestPolicy
+
+VibeOps 的 Builder Agent 透過 Service Connector 呼叫 DevAP 的 QualityGate：
+
+```
+VibeOps Builder → Service Connector → devap.quality-gate.check → DevAP QualityGate
+                                                                       │
+                                                    ┌──────────────────┤
+                                                    │                  │
+                                              static_analysis   completion_criteria
+                                                    │                  │
+                                                    └──────────────────┘
+                                                           │
+                                                    QualityGateResult
+```
+
+### D2. UDS → DevAP → VibeOps 完整測試品質流
+
+```
+UDS test-governance.ai.yaml
+  │
+  ├── TestPolicy 定義（金字塔比例、完成準則）
+  │
+  └── devap types.ts
+        │
+        ├── TestPolicy interface
+        ├── CompletionCheck interface
+        │
+        └── DevAP QualityGate 執行
+              │
+              └── VibeOps Service Connector 呼叫
+                    │
+                    ├── VibeOps Builder: TDD 循環品質保證
+                    ├── VibeOps Reviewer: AC coverage + checkin
+                    └── VibeOps Evaluator: 品質度量回饋
+```
+
+### D3. VibeOps 特有需求
+
+| 需求 | DevAP 現有支援 | 缺口 |
+|------|---------------|------|
+| 7+1 Agent 映射到 Task | AgentAdapter + Task | 需 VibeOps 實作 adapter |
+| Guardian cross-cut | SafetyHook | Guardian 可映射為 SafetyHook |
+| Feedback Loop | FixLoop | 語意相近，可複用 |
+| Pipeline Memory | 無對應 | VibeOps 特有，不委託 DevAP |
+| Human Checkpoint | CheckpointCallback | 已支援 |
+
+---
+
 ## 驗證方式
 
 ```bash

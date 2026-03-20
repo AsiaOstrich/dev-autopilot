@@ -221,6 +221,26 @@ Python support is planned for a future milestone. See [CLAUDE.md](CLAUDE.md) for
 - [Task Plan Schema](specs/task-schema.json)
 - [Example Plan](specs/examples/new-project-plan.json)
 
+## Ecosystem
+
+DevAP is the **orchestration execution layer** in the AsiaOstrich three-layer product architecture:
+
+```
+UDS (What to do) → DevAP (How agents do it) → VibeOps (Full lifecycle)
+```
+
+| Layer | Product | Role | License |
+|-------|---------|------|---------|
+| Standards | [UDS](https://github.com/AsiaOstrich/universal-dev-standards) | Development methodology framework | MIT + CC BY 4.0 |
+| Orchestration | **DevAP** | Agent-agnostic orchestration engine | Apache-2.0 |
+| Lifecycle | [VibeOps](https://github.com/AsiaOstrich/vibeops360) | AI-driven software factory | AGPL-3.0-only |
+
+- **UDS** defines *what* standards to follow → DevAP consumes UDS standards for quality gates
+- **DevAP** defines *how* agents execute → VibeOps implements the `AgentAdapter` interface
+- **VibeOps** provides the *runtime* → DevAP can orchestrate VibeOps as a "super agent"
+
+The `AgentAdapter` interface is the primary integration point. VibeOps implements this interface to allow DevAP to orchestrate its 7+1 agents.
+
 ## License
 
 [Apache-2.0](LICENSE)

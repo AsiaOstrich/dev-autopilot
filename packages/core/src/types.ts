@@ -5,7 +5,13 @@
  * 參考：docs/research/feasibility-and-design.md 第 6 節
  */
 
-/** 支援的 AI Agent 類型 */
+/**
+ * 支援的 AI Agent 類型
+ *
+ * 注意：VibeOps adapter 使用 `"vibeops" as AgentType` 進行型別轉換，
+ * 因為 VibeOps 是外部產品（AGPL-3.0），不直接加入此 union type。
+ * 未來若需正式支援，可擴充此 union。
+ */
 export type AgentType = "claude" | "opencode" | "codex" | "cline" | "cursor" | "cli";
 
 /** 多層級測試名稱 */
@@ -232,6 +238,24 @@ export interface ExecutionReport {
  *
  * 所有 AI agent adapter 必須實作此介面。
  * 每個 adapter 負責與特定 agent 的 SDK/CLI 溝通。
+ *
+ * ## VibeOps 整合指引
+ *
+ * VibeOps（vibeops360）可實作此介面讓 DevAP 編排其 7+1 agents：
+ *
+ * ```typescript
+ * class VibeOpsAdapter implements AgentAdapter {
+ *   readonly name: AgentType = "vibeops" as AgentType;
+ *   // 透過 VibeOps REST API 路由到對應 Agent
+ *   async executeTask(task, options) { ... }
+ *   // 檢查 VibeOps 服務健康狀態
+ *   async isAvailable() { ... }
+ *   // 恢復暫停的 pipeline session
+ *   async resumeSession(sessionId) { ... }
+ * }
+ * ```
+ *
+ * 詳見 SPEC-004-vibeops-adapter.md。
  */
 export interface AgentAdapter {
   /** agent 類型名稱 */
