@@ -23,10 +23,14 @@ Planning（互動）→ Execution（自動）→ Reporting（互動）
 ```
 
 核心元件：
-- **Orchestrator**：讀取 task plan，解析 DAG 依賴，依序/並行派發 task
-- **AgentAdapter**：可插拔介面，每個 agent 一個 adapter
-- **TaskRunner**：呼叫 adapter.executeTask()，跑 verify_command
-- **ReportGenerator**：產出 execution_report.json
+- **Orchestrator**：讀取 task plan，解析 DAG 依賴，依序/並行派發 task，產出 ExecutionReport
+- **AgentAdapter**：可插拔介面，每個 agent 一個 adapter（claude / opencode / cli）
+- **Quality Gate**：品質閘門（verify → lint → type-check → 多層級測試）
+- **Fix Loop**：驗證失敗時自動注入錯誤回饋重試，含 cost circuit breaker
+- **Judge**：獨立 Agent 審查 task 結果，APPROVE/REJECT 判定
+- **Safety Hook**：危險指令偵測 + 硬編碼祕密掃描
+- **Plan Validator**：JSON Schema 驗證 + DAG 合法性檢查
+- **Plan Resolver**：純函式橋接層，整合驗證、分層、安全檢查
 
 ## 核心介面
 
@@ -55,14 +59,16 @@ class AgentAdapter(ABC):
 ## 目錄結構
 
 ```
-packages/core/src/         → orchestrator, task-runner, session-manager, types
+packages/core/src/         → orchestrator, quality-gate, fix-loop, judge, safety-hook, plan-validator, plan-resolver, types
 packages/adapter-claude/   → Claude Agent SDK adapter
+packages/adapter-cli/      → Claude CLI 子進程 adapter（零依賴）
 packages/adapter-opencode/ → OpenCode SDK adapter
-packages/cli/              → CLI 入口 (devap run --plan <file>)
-python/devap/      → Python 版（Milestone 2）
-specs/                     → task-schema.json, report-schema.json, examples/
-skills/                    → CLAUDE.md, AGENTS.md
-docs/research/             → 完整研究文件（本檔案的詳細版）
+packages/cli/              → CLI 入口 (devap run / init / sync-standards)
+python/devap/              → Python 版（Milestone 2，目前為骨架）
+specs/                     → task-schema.json, test-policy-schema.json, SPEC-001~005, examples/
+docs/research/             → 完整研究文件
+.standards/                → UDS 標準（45 個）
+.claude/skills/            → Claude Code 技能與工作流程
 ```
 
 ## 開發指令
@@ -101,9 +107,24 @@ mypy .
 - Task Plan Schema：specs/task-schema.json
 - Adapter 開發指南：docs/adapter-guide.md（待建立）
 
+## 三層產品架構
+
+AsiaOstrich 產品線以三層架構劃分職責：
+
+| | UDS | DevAP | VibeOps |
+|---|---|---|---|
+| **定位** | 標準定義層 | 編排執行層 | 全生命週期平台 |
+| **回答什麼** | 「怎樣算做好」 | 「怎樣自動做」 | 「整套怎麼跑」 |
+| **授權** | MIT + CC BY 4.0 | Apache-2.0 | AGPL-3.0-only |
+| **整合模式** | 被讀取 / 被安裝 | 被呼叫 / 被嵌入 | 呼叫下游 / 編排全流程 |
+
+- **UDS** — 定規矩：提供語言無關的開發標準（`.ai.yaml`），任何專案皆可安裝使用
+- **DevAP** — 定協定：將標準轉化為可執行的 DAG 任務編排，搭配品質閘門與自動修復
+- **VibeOps** — 跑起來：串接 7+1 agents 完成從需求到部署的完整軟體開發生命週期
+
 ## 跨產品整合策略
 
-DevAP 在 AsiaOstrich 三層產品架構中定位為**編排執行層**：
+DevAP 在三層架構中定位為**編排執行層**：
 
 ```
 UDS (標準定義) ──→ DevAP (編排執行) ──→ VibeOps (全生命週期)
@@ -161,9 +182,12 @@ AI 助手應以繁體中文回覆使用者的問題與請求。
 ---
 
 <!-- UDS:STANDARDS:START -->
+<!-- WARNING: This block is managed by UDS (universal-dev-standards). DO NOT manually edit. Use 'npx uds install' or 'npx uds update' to modify. -->
+<!-- WARNING: This block is managed by UDS (universal-dev-standards). DO NOT manually edit. Use 'npx uds install' or 'npx uds update' to modify. -->
 ## Commit Message Language
 Write commit messages in **bilingual** format (English + 繁體中文).
 Format: `<type>(<scope>): <English>. <中文>.`
+Body MUST be bilingual: English first → blank line → Chinese second. NEVER mix languages in one paragraph.
 
 ## Standards Compliance Instructions
 
@@ -172,6 +196,7 @@ Format: `<type>(<scope>): <English>. <中文>.`
 |------|----------|------|
 | Project context | [project-context-memory.ai.yaml](.standards/project-context-memory.ai.yaml) | Planning & Coding |
 | Writing commits | [commit-message.ai.yaml](.standards/commit-message.ai.yaml) | Every commit |
+| Workflow gates | [workflow-enforcement.ai.yaml](.standards/workflow-enforcement.ai.yaml) | Before any workflow phase |
 
 **SHOULD follow** (相關任務時參考):
 | Task | Standard | When |
@@ -185,7 +210,7 @@ Format: `<type>(<scope>): <English>. <中文>.`
 
 本專案採用 UDS 標準。所有規範位於 `.standards/`：
 
-### Core (35 standards)
+### Core (45 standards)
 - `deployment-standards.ai.yaml` - deployment-standards.ai.yaml
 - `documentation-writing-standards.ai.yaml` - documentation-writing-standards.ai.yaml
 - `ai-agreement-standards.ai.yaml` - ai-agreement-standards.ai.yaml
@@ -221,6 +246,16 @@ Format: `<type>(<scope>): <English>. <中文>.`
 - `requirement-checklist.md` - requirement-checklist.md
 - `requirement-template.md` - requirement-template.md
 - `requirement-document-template.md` - requirement-document-template.md
+- `api-design-standards.ai.yaml` - api-design-standards.ai.yaml
+- `database-standards.ai.yaml` - database-standards.ai.yaml
+- `test-governance.ai.yaml` - test-governance.ai.yaml
+- `structured-task-definition.ai.yaml` - structured-task-definition.ai.yaml
+- `workflow-state-protocol.ai.yaml` - workflow-state-protocol.ai.yaml
+- `workflow-enforcement.ai.yaml` - 工作流程強制執行
+- `context-aware-loading.ai.yaml` - context-aware-loading.ai.yaml
+- `pipeline-integration-standards.ai.yaml` - pipeline-integration-standards.ai.yaml
+- `acceptance-criteria-traceability.ai.yaml` - acceptance-criteria-traceability.ai.yaml
+- `change-batching-standards.ai.yaml` - change-batching-standards.ai.yaml
 <!-- UDS:STANDARDS:END -->
 
 ---
