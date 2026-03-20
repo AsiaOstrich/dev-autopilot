@@ -57,21 +57,19 @@ standard:
         - "ruff check . (Python)"
         - "eslint . (TypeScript/JavaScript)"
         - "mypy . (Python type checking)"
-      devap_mapping: TestPolicy.static_analysis_command
 
   completion_criteria:
     description: >
       Test completion criteria define when testing activities can be considered done.
       ISO 29119 calls these "Test Completion Criteria" or "Test Exit Criteria".
       Agile/Scrum calls them "Definition of Done (DoD)".
-      Both concepts map to the same devap field: TestPolicy.completion_criteria.
 
     task_level:
       description: Per-task completion criteria (checked after each task)
       checks:
         - name: verify_command_passed
           required: true
-          description: Task verify_command or test_levels all pass
+          description: Task verify command or test levels all pass
         - name: no_lint_errors
           required: true
           description: No lint errors in changed files
@@ -133,7 +131,6 @@ standard:
       trigger: completing a task or feature
       instruction: >
         Verify all required completion criteria are met before marking task/feature as done.
-        Use TestPolicy.completion_criteria for automated checks.
       priority: required
 
     - id: pyramid-compliance
