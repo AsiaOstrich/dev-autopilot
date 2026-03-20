@@ -60,7 +60,14 @@ export interface TestPolicy {
 }
 
 /** Task 執行狀態 */
-export type TaskStatus = "success" | "failed" | "skipped" | "timeout";
+export type TaskStatus =
+  | "success"            // 正常完成
+  | "failed"             // 執行失敗
+  | "skipped"            // 依賴失敗跳過
+  | "timeout"            // 逾時
+  | "done_with_concerns" // 完成但有疑慮（借鑑 Superpowers DONE_WITH_CONCERNS）
+  | "needs_context"      // 需要更多上下文（借鑑 Superpowers NEEDS_CONTEXT）
+  | "blocked";           // 無法完成，需升級處理（借鑑 Superpowers BLOCKED）
 
 /**
  * 單一任務定義
@@ -97,6 +104,8 @@ export interface Task {
   user_intent?: string;
   /** 多層級測試定義（優先於 verify_command） */
   test_levels?: TestLevel[];
+  /** 建議模型等級（借鑑 Superpowers 模型分級策略） */
+  model_tier?: ModelTier;
 }
 
 /**
@@ -165,6 +174,14 @@ export interface TaskResult {
   judge_verdict?: "APPROVE" | "REJECT";
   /** 重試總成本（美元） */
   retry_cost_usd?: number;
+  /** 疑慮說明（status 為 done_with_concerns 時） */
+  concerns?: string[];
+  /** 需要的額外上下文（status 為 needs_context 時） */
+  needed_context?: string;
+  /** 阻塞原因（status 為 blocked 時） */
+  block_reason?: string;
+  /** 驗證證據（借鑑 Superpowers Iron Law：Evidence before claims） */
+  verification_evidence?: VerificationEvidence[];
 }
 
 /**
@@ -179,6 +196,8 @@ export interface ExecuteOptions {
   forkSession?: boolean;
   /** 進度回呼 */
   onProgress?: (message: string) => void;
+  /** 模型等級建議（adapter 可據此選擇不同 model endpoint） */
+  modelTier?: ModelTier;
 }
 
 /**
@@ -193,6 +212,12 @@ export interface ExecutionSummary {
   failed: number;
   /** 跳過數 */
   skipped: number;
+  /** 有疑慮完成數 */
+  done_with_concerns: number;
+  /** 需要上下文數 */
+  needs_context: number;
+  /** 被阻塞數 */
+  blocked: number;
   /** 總成本（美元） */
   total_cost_usd: number;
   /** 總耗時（毫秒） */
@@ -337,6 +362,55 @@ export interface ResolvedPlan {
   quality_warnings: string[];
 }
 
+/**
+ * 模型等級（借鑑 Superpowers 模型分級策略）
+ *
+ * - fast: 單一檔案、明確 spec 的機械性實作
+ * - standard: 多檔案整合、需要判斷力
+ * - capable: 架構設計、審查、除錯
+ */
+export type ModelTier = "fast" | "standard" | "capable";
+
+/**
+ * 驗證證據（借鑑 Superpowers Iron Law: Evidence before claims）
+ *
+ * 要求 agent 在聲稱完成前提供實際驗證結果。
+ */
+export interface VerificationEvidence {
+  /** 實際執行的驗證指令 */
+  command: string;
+  /** 退出碼 */
+  exit_code: number;
+  /** 驗證輸出（截斷至合理長度） */
+  output: string;
+  /** 執行時間（ISO 8601） */
+  timestamp: string;
+}
+
+/**
+ * Judge 審查階段（借鑑 Superpowers 雙階段審查）
+ *
+ * - spec: Spec Compliance — 比對 task spec 與實作產出
+ * - quality: Code Quality — 程式碼品質、測試覆蓋、架構一致性
+ */
+export type JudgeReviewStage = "spec" | "quality";
+
+/**
+ * 結構化除錯回饋（借鑑 Superpowers 四階段除錯法）
+ *
+ * Fix Loop 在重試時注入結構化指引，而非僅轉發錯誤訊息。
+ */
+export interface FixFeedback {
+  /** 原始錯誤訊息 */
+  error: string;
+  /** 當前除錯階段 */
+  phase: "root_cause" | "pattern_analysis" | "hypothesis" | "fix";
+  /** 先前嘗試記錄 */
+  previous_attempts: Array<{ hypothesis: string; result: string }>;
+  /** 結構化除錯指引 */
+  instruction: string;
+}
+
 /** Judge 審查策略 */
 export type JudgePolicy = "always" | "on_change" | "never";
 
@@ -454,6 +528,8 @@ export interface OrchestratorOptions {
   checkpointPolicy?: CheckpointPolicy;
   /** Checkpoint 回呼（checkpoint_policy 非 never 時必須提供） */
   onCheckpoint?: CheckpointCallback;
+  /** 隔離模式（借鑑 Superpowers Git Worktree 隔離執行） */
+  isolation?: "none" | "worktree";
 }
 
 /**

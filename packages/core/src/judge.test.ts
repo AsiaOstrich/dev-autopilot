@@ -120,6 +120,27 @@ describe("buildJudgePrompt", () => {
     expect(prompt).not.toContain("criteria_results");
   });
 
+  it("reviewStage=spec 時使用 Spec Compliance 指引", async () => {
+    const { buildJudgePrompt } = await import("./judge.js");
+    const task: Task = { id: "T-001", title: "Spec 任務", spec: "實作 API" };
+    const result: TaskResult = { task_id: "T-001", status: "success", duration_ms: 1000 };
+    const prompt = buildJudgePrompt(task, result, "diff", "", "spec");
+    expect(prompt).toContain("Spec Compliance Reviewer");
+    expect(prompt).toContain("missing");
+    expect(prompt).toContain("extra");
+    expect(prompt).toContain("misunderstood");
+  });
+
+  it("reviewStage=quality 時使用 Code Quality 指引", async () => {
+    const { buildJudgePrompt } = await import("./judge.js");
+    const task: Task = { id: "T-001", title: "Quality 任務", spec: "重構模組" };
+    const result: TaskResult = { task_id: "T-001", status: "success", duration_ms: 1000 };
+    const prompt = buildJudgePrompt(task, result, "diff", "", "quality");
+    expect(prompt).toContain("Code Quality Reviewer");
+    expect(prompt).toContain("單一職責");
+    expect(prompt).toContain("介面清晰度");
+  });
+
   it("有 acceptance_criteria 時注入到 prompt 並要求逐條判定", async () => {
     const { buildJudgePrompt } = await import("./judge.js");
     const task: Task = {
@@ -221,6 +242,39 @@ describe("parseJudgeOutput", () => {
     expect(result.verdict).toBe("REJECT");
     expect(result.reasoning).toBe("不符合要求");
     expect(result.criteria_results).toBeUndefined();
+  });
+});
+
+describe("runDualStageJudge（Superpowers 雙階段審查）", () => {
+  it("應能匯入 runDualStageJudge 函式", async () => {
+    const { runDualStageJudge } = await import("./judge.js");
+    expect(runDualStageJudge).toBeDefined();
+    expect(typeof runDualStageJudge).toBe("function");
+  });
+
+  it("應執行雙階段審查並回傳結果", async () => {
+    const { runDualStageJudge } = await import("./judge.js");
+    const task: Task = {
+      id: "T-001",
+      title: "測試雙階段",
+      spec: "實作功能",
+    };
+    const taskResult: TaskResult = {
+      task_id: "T-001",
+      status: "success",
+      cost_usd: 0.5,
+      duration_ms: 5000,
+    };
+
+    const result = await runDualStageJudge(task, taskResult, {
+      cwd: "/tmp/test",
+    });
+
+    // mock 預設回傳 APPROVE，所以兩階段都通過
+    expect(result.verdict).toBe("APPROVE");
+    expect(result.review_stage).toBe("quality");
+    // 成本應合併
+    expect(result.cost_usd).toBeGreaterThan(0);
   });
 });
 

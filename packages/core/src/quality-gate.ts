@@ -9,7 +9,7 @@
  * 透過回呼函式執行 shell 指令，方便測試 mock。
  */
 
-import type { QualityConfig, Task, CompletionCheck } from "./types.js";
+import type { QualityConfig, Task, CompletionCheck, VerificationEvidence } from "./types.js";
 
 /**
  * Quality Gate 檢查結果
@@ -21,6 +21,8 @@ export interface QualityGateResult {
   steps: QualityGateStep[];
   /** 失敗的回饋訊息（用於 fix loop 注入 agent prompt） */
   feedback?: string;
+  /** 驗證證據（借鑑 Superpowers Iron Law：Evidence before claims） */
+  evidence: VerificationEvidence[];
 }
 
 /**
@@ -87,57 +89,70 @@ export async function runQualityGate(
   options: QualityGateOptions,
 ): Promise<QualityGateResult> {
   const steps: QualityGateStep[] = [];
+  const evidence: VerificationEvidence[] = [];
 
   // 判斷走多層級或傳統模式
   const hasTestLevels = task.test_levels && task.test_levels.length > 0;
+
+  /** 執行步驟並收集證據的輔助函式 */
+  const runStep = async (
+    name: QualityGateStep["name"],
+    command: string,
+  ): Promise<QualityGateStep> => {
+    const step = await executeStep(name, command, options);
+    steps.push(step);
+    // 收集驗證證據（Iron Law: Evidence before claims）
+    evidence.push({
+      command,
+      exit_code: step.passed ? 0 : 1,
+      output: step.output.slice(0, 2000),
+      timestamp: new Date().toISOString(),
+    });
+    return step;
+  };
 
   if (hasTestLevels) {
     // 多層級測試模式：依序執行每個 test level
     for (const level of task.test_levels!) {
       options.onProgress?.(`[${task.id}] Quality Gate: ${level.name} → ${level.command}`);
-      const step = await executeStep(level.name, level.command, options);
-      steps.push(step);
+      const step = await runStep(level.name, level.command);
       if (!step.passed) {
-        return buildFailResult(steps, step);
+        return buildFailResult(steps, step, evidence);
       }
     }
   } else if (qualityConfig.verify && task.verify_command) {
     // 傳統模式：verify_command
     options.onProgress?.(`[${task.id}] Quality Gate: verify_command → ${task.verify_command}`);
-    const step = await executeStep("verify", task.verify_command, options);
-    steps.push(step);
+    const step = await runStep("verify", task.verify_command);
     if (!step.passed) {
-      return buildFailResult(steps, step);
+      return buildFailResult(steps, step, evidence);
     }
   }
 
   // lint_command（兩種模式都執行）
   if (qualityConfig.lint_command) {
     options.onProgress?.(`[${task.id}] Quality Gate: lint → ${qualityConfig.lint_command}`);
-    const step = await executeStep("lint", qualityConfig.lint_command, options);
-    steps.push(step);
+    const step = await runStep("lint", qualityConfig.lint_command);
     if (!step.passed) {
-      return buildFailResult(steps, step);
+      return buildFailResult(steps, step, evidence);
     }
   }
 
   // type_check_command（兩種模式都執行）
   if (qualityConfig.type_check_command) {
     options.onProgress?.(`[${task.id}] Quality Gate: type_check → ${qualityConfig.type_check_command}`);
-    const step = await executeStep("type_check", qualityConfig.type_check_command, options);
-    steps.push(step);
+    const step = await runStep("type_check", qualityConfig.type_check_command);
     if (!step.passed) {
-      return buildFailResult(steps, step);
+      return buildFailResult(steps, step, evidence);
     }
   }
 
   // static_analysis_command（兩種模式都執行）
   if (qualityConfig.static_analysis_command) {
     options.onProgress?.(`[${task.id}] Quality Gate: static_analysis → ${qualityConfig.static_analysis_command}`);
-    const step = await executeStep("static_analysis", qualityConfig.static_analysis_command, options);
-    steps.push(step);
+    const step = await runStep("static_analysis", qualityConfig.static_analysis_command);
     if (!step.passed) {
-      return buildFailResult(steps, step);
+      return buildFailResult(steps, step, evidence);
     }
   }
 
@@ -146,15 +161,14 @@ export async function runQualityGate(
     for (const criterion of qualityConfig.completion_criteria) {
       if (!criterion.command) continue; // 無 command → 由 Judge 審查，跳過
       options.onProgress?.(`[${task.id}] Quality Gate: completion_check(${criterion.name}) → ${criterion.command}`);
-      const step = await executeStep("completion_check", criterion.command, options);
-      steps.push(step);
+      const step = await runStep("completion_check", criterion.command);
       if (!step.passed && criterion.required) {
-        return buildFailResult(steps, step);
+        return buildFailResult(steps, step, evidence);
       }
     }
   }
 
-  return { passed: true, steps };
+  return { passed: true, steps, evidence };
 }
 
 /**
@@ -190,6 +204,7 @@ async function executeStep(
 function buildFailResult(
   steps: QualityGateStep[],
   failedStep: QualityGateStep,
+  evidence: VerificationEvidence[],
 ): QualityGateResult {
   const feedback = [
     `品質門檻「${failedStep.name}」失敗。`,
@@ -200,5 +215,5 @@ function buildFailResult(
     "請修正上述問題後重試。",
   ].join("\n");
 
-  return { passed: false, steps, feedback };
+  return { passed: false, steps, feedback, evidence };
 }

@@ -10,7 +10,7 @@ import { spawn } from "node:child_process";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import type { JudgePolicy, Task, TaskResult } from "./types.js";
+import type { JudgePolicy, JudgeReviewStage, Task, TaskResult } from "./types.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -35,6 +35,8 @@ export interface JudgeResult {
   verdict: JudgeVerdict;
   /** 理由說明 */
   reasoning: string;
+  /** 審查階段（借鑑 Superpowers 雙階段審查） */
+  review_stage?: JudgeReviewStage;
   /** Judge session ID */
   session_id?: string;
   /** 審查成本 */
@@ -55,6 +57,8 @@ export interface JudgeOptions {
   onProgress?: (message: string) => void;
   /** Judge 的 max_turns 限制（預設 10） */
   maxTurns?: number;
+  /** 審查階段（借鑑 Superpowers 雙階段審查：spec 先行，再 quality） */
+  reviewStage?: JudgeReviewStage;
 }
 
 /**
@@ -124,7 +128,7 @@ export async function runJudge(
     }
 
     // 構建 Judge prompt
-    const prompt = buildJudgePrompt(task, taskResult, diff, verifyResult);
+    const prompt = buildJudgePrompt(task, taskResult, diff, verifyResult, options.reviewStage);
 
     // 啟動 Judge 子進程
     const result = await spawnJudge(prompt, options);
@@ -139,6 +143,51 @@ export async function runJudge(
       reasoning: `Judge 審查過程發生錯誤，預設通過：${error instanceof Error ? error.message : String(error)}`,
     };
   }
+}
+
+/**
+ * 執行雙階段 Judge 審查（借鑑 Superpowers subagent-driven-development）
+ *
+ * 1. Spec Compliance — 比對 task spec 與實作產出，檢查 missing/extra/misunderstood
+ * 2. Code Quality — 程式碼品質、測試覆蓋、架構一致性
+ *
+ * Spec 通過才進 Quality 階段。任一階段 REJECT 即停止。
+ *
+ * @param task - 已完成的任務
+ * @param taskResult - 任務執行結果
+ * @param options - Judge 選項
+ * @returns 雙階段審查結果（回傳最終階段的 JudgeResult）
+ */
+export async function runDualStageJudge(
+  task: Task,
+  taskResult: TaskResult,
+  options: JudgeOptions,
+): Promise<JudgeResult> {
+  // 階段 1: Spec Compliance
+  options.onProgress?.(`[${task.id}] 啟動 Judge 審查（Spec Compliance）`);
+  const specResult = await runJudge(task, taskResult, {
+    ...options,
+    reviewStage: "spec",
+  });
+  specResult.review_stage = "spec";
+
+  if (specResult.verdict === "REJECT") {
+    options.onProgress?.(`[${task.id}] Spec Compliance 審查未通過，跳過 Code Quality`);
+    return specResult;
+  }
+
+  // 階段 2: Code Quality
+  options.onProgress?.(`[${task.id}] 啟動 Judge 審查（Code Quality）`);
+  const qualityResult = await runJudge(task, taskResult, {
+    ...options,
+    reviewStage: "quality",
+  });
+  qualityResult.review_stage = "quality";
+
+  // 合併成本
+  qualityResult.cost_usd = (specResult.cost_usd ?? 0) + (qualityResult.cost_usd ?? 0);
+
+  return qualityResult;
 }
 
 /**
@@ -180,6 +229,7 @@ export function buildJudgePrompt(
   taskResult: TaskResult,
   diff: string,
   verifyResult: string,
+  reviewStage?: JudgeReviewStage,
 ): string {
   const hasCriteria = task.acceptance_criteria && task.acceptance_criteria.length > 0;
   const hasIntent = !!task.user_intent;
@@ -227,7 +277,31 @@ export function buildJudgePrompt(
     judgingCriteria.push(`${hasCriteria ? "6" : "5"}. 實作是否真正解決了使用者的問題（意圖達成度）？`);
   }
 
-  return `你是一個嚴格的 Code Review Judge。請審查以下任務的執行結果。
+  // 階段特化指引
+  let stageHeader = "你是一個嚴格的 Code Review Judge。請審查以下任務的執行結果。";
+  let stageGuidance = "";
+  if (reviewStage === "spec") {
+    stageHeader = "你是一個 Spec Compliance Reviewer。請嚴格比對任務規格與實際實作。";
+    stageGuidance = `
+## Spec Compliance 審查重點（借鑑 Superpowers）
+- **不信任報告，讀實際程式碼**：agent 聲稱完成不代表真正完成
+- 檢查是否有 **missing**（規格要求但未實作）
+- 檢查是否有 **extra**（規格未要求但額外實作）
+- 檢查是否有 **misunderstood**（實作方向與規格不符）
+`;
+  } else if (reviewStage === "quality") {
+    stageHeader = "你是一個 Code Quality Reviewer。請審查程式碼品質與架構一致性。";
+    stageGuidance = `
+## Code Quality 審查重點（借鑑 Superpowers）
+- 單一職責原則：每個函式/模組是否只做一件事
+- 介面清晰度：API 是否直觀、命名是否一致
+- 檔案大小：單檔是否過大（超過 300 行需注意）
+- 測試覆蓋：關鍵路徑是否有測試
+- 錯誤處理：邊界條件是否考慮周全
+`;
+  }
+
+  return `${stageHeader}
 
 ## 原始任務規格
 
@@ -247,7 +321,7 @@ ${diff.slice(0, 10000)}
 \`\`\`
 
 ${verifyResult ? `## 驗證指令結果\n\`\`\`\n${verifyResult.slice(0, 5000)}\n\`\`\`` : ""}
-
+${stageGuidance}
 ## 你的任務
 
 請仔細審查以上資訊，判斷任務是否正確完成。

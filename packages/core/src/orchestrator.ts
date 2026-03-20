@@ -8,7 +8,8 @@
 import { validatePlan } from "./plan-validator.js";
 import { runFixLoop, type ExecuteResult } from "./fix-loop.js";
 import { runQualityGate, type ShellExecutor } from "./quality-gate.js";
-import { runJudge, shouldRunJudge } from "./judge.js";
+import { runDualStageJudge, shouldRunJudge } from "./judge.js";
+import { WorktreeManager } from "./worktree-manager.js";
 import type {
   AgentAdapter,
   CheckpointAction,
@@ -182,15 +183,29 @@ export async function orchestrate(
 
   const startTime = Date.now();
 
-  // 2. 選擇執行模式
-  if (options.parallel) {
-    const results = await orchestrateParallel(plan, adapter, options);
-    return buildReport(results, Date.now() - startTime, options.qualityConfig);
+  // 2. Worktree 隔離模式（借鑑 Superpowers Git Worktree 隔離執行）
+  let worktreeManager: WorktreeManager | undefined;
+  if (options.isolation === "worktree") {
+    worktreeManager = new WorktreeManager(options.cwd);
+    options.onProgress?.("啟用 Worktree 隔離模式");
   }
 
-  // 序列模式（原有邏輯）
-  const results = await orchestrateSequential(plan, adapter, options);
-  return buildReport(results, Date.now() - startTime, options.qualityConfig);
+  // 3. 選擇執行模式
+  try {
+    if (options.parallel) {
+      const results = await orchestrateParallel(plan, adapter, options, worktreeManager);
+      return buildReport(results, Date.now() - startTime, options.qualityConfig);
+    }
+
+    // 序列模式（原有邏輯）
+    const results = await orchestrateSequential(plan, adapter, options, worktreeManager);
+    return buildReport(results, Date.now() - startTime, options.qualityConfig);
+  } finally {
+    // 清理所有 worktree
+    if (worktreeManager) {
+      await worktreeManager.cleanupAll().catch(() => {});
+    }
+  }
 }
 
 /**
@@ -200,6 +215,7 @@ async function orchestrateSequential(
   plan: TaskPlan,
   adapter: AgentAdapter,
   options: OrchestratorOptions,
+  worktreeManager?: WorktreeManager,
 ): Promise<TaskResult[]> {
   const sortedTasks = topologicalSort(plan.tasks);
   const results: TaskResult[] = [];
@@ -208,7 +224,7 @@ async function orchestrateSequential(
 
   for (let i = 0; i < sortedTasks.length; i++) {
     const task = mergeDefaults(sortedTasks[i], plan);
-    const result = await executeOneTask(task, adapter, options, completed);
+    const result = await executeOneTask(task, adapter, options, completed, worktreeManager);
     results.push(result);
     completed.set(task.id, result);
 
@@ -242,6 +258,7 @@ async function orchestrateParallel(
   plan: TaskPlan,
   adapter: AgentAdapter,
   options: OrchestratorOptions,
+  worktreeManager?: WorktreeManager,
 ): Promise<TaskResult[]> {
   const layers = topologicalLayers(plan.tasks);
   const results: TaskResult[] = [];
@@ -264,7 +281,7 @@ async function orchestrateParallel(
     for (let i = 0; i < mergedTasks.length; i += maxParallel) {
       const batch = mergedTasks.slice(i, i + maxParallel);
       const batchResults = await Promise.all(
-        batch.map(task => executeOneTask(task, adapter, options, completed)),
+        batch.map(task => executeOneTask(task, adapter, options, completed, worktreeManager)),
       );
       layerResults.push(...batchResults);
     }
@@ -334,11 +351,13 @@ async function executeOneTask(
   adapter: AgentAdapter,
   options: OrchestratorOptions,
   completed: Map<string, TaskResult>,
+  worktreeManager?: WorktreeManager,
 ): Promise<TaskResult> {
-  // 檢查依賴是否都成功
-  const depsFailed = (task.depends_on ?? []).some(
-    (dep) => completed.get(dep)?.status !== "success",
-  );
+  // 檢查依賴是否都成功（done_with_concerns 也視為可繼續）
+  const depsFailed = (task.depends_on ?? []).some((dep) => {
+    const depStatus = completed.get(dep)?.status;
+    return depStatus !== "success" && depStatus !== "done_with_concerns";
+  });
 
   if (depsFailed) {
     options.onProgress?.(`[${task.id}] 跳過：依賴任務失敗`);
@@ -369,11 +388,11 @@ async function executeOneTask(
 
   // 無品質設定（none 或未設定）→ 走原有邏輯
   if (!qc || (!qc.verify && qc.judge_policy === "never" && qc.max_retries === 0)) {
-    return executeTaskSimple(task, adapter, options, taskStartTime);
+    return executeTaskSimple(task, adapter, options, taskStartTime, worktreeManager);
   }
 
   // 有品質設定 → 走 fix loop + quality gate + judge
-  return executeTaskWithQuality(task, adapter, options, qc, taskStartTime);
+  return executeTaskWithQuality(task, adapter, options, qc, taskStartTime, worktreeManager);
 }
 
 /**
@@ -384,17 +403,43 @@ async function executeTaskSimple(
   adapter: AgentAdapter,
   options: OrchestratorOptions,
   taskStartTime: number,
+  worktreeManager?: WorktreeManager,
 ): Promise<TaskResult> {
   options.onProgress?.(`[${task.id}] 開始執行：${task.title}`);
+
+  // Worktree 隔離：為 task 建立獨立 worktree
+  let taskCwd = options.cwd;
+  if (worktreeManager) {
+    try {
+      const wtInfo = await worktreeManager.create(task.id);
+      taskCwd = wtInfo.path;
+      options.onProgress?.(`[${task.id}] 已建立 worktree: ${wtInfo.path}`);
+    } catch (error) {
+      options.onProgress?.(`[${task.id}] 建立 worktree 失敗，使用原始目錄: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
   try {
     const execOpts: ExecuteOptions = {
-      cwd: options.cwd,
+      cwd: taskCwd,
       sessionId: options.sessionId,
       forkSession: task.fork_session,
       onProgress: options.onProgress,
+      modelTier: task.model_tier,
     };
     const result = await adapter.executeTask(task, execOpts);
     result.duration_ms = result.duration_ms ?? Date.now() - taskStartTime;
+
+    // Worktree 合併
+    if (worktreeManager && result.status === "success") {
+      try {
+        await worktreeManager.merge(task.id);
+        options.onProgress?.(`[${task.id}] worktree 已合併`);
+      } catch (error) {
+        options.onProgress?.(`[${task.id}] worktree 合併失敗: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+
     options.onProgress?.(`[${task.id}] 完成：${result.status}`);
     return result;
   } catch (error) {
@@ -418,8 +463,21 @@ async function executeTaskWithQuality(
   options: OrchestratorOptions,
   qc: QualityConfig,
   taskStartTime: number,
+  worktreeManager?: WorktreeManager,
 ): Promise<TaskResult> {
   options.onProgress?.(`[${task.id}] 開始執行（品質模式）：${task.title}`);
+
+  // Worktree 隔離
+  let taskCwd = options.cwd;
+  if (worktreeManager) {
+    try {
+      const wtInfo = await worktreeManager.create(task.id);
+      taskCwd = wtInfo.path;
+      options.onProgress?.(`[${task.id}] 已建立 worktree: ${wtInfo.path}`);
+    } catch (error) {
+      options.onProgress?.(`[${task.id}] 建立 worktree 失敗，使用原始目錄: ${error instanceof Error ? error.message : error}`);
+    }
+  }
 
   const fixLoopResult = await runFixLoop(
     { max_retries: qc.max_retries, max_retry_budget_usd: qc.max_retry_budget_usd },
@@ -434,10 +492,11 @@ async function executeTaskWithQuality(
         let taskResult: TaskResult;
         try {
           const execOpts: ExecuteOptions = {
-            cwd: options.cwd,
+            cwd: taskCwd,
             sessionId: options.sessionId,
             forkSession: task.fork_session,
             onProgress: options.onProgress,
+            modelTier: task.model_tier,
           };
           taskResult = await adapter.executeTask(taskWithFeedback, execOpts);
         } catch (error) {
@@ -448,6 +507,7 @@ async function executeTaskWithQuality(
           };
         }
 
+        // 處理新的 Implementer 狀態（借鑑 Superpowers）
         if (taskResult.status === "failed") {
           return {
             success: false,
@@ -455,10 +515,24 @@ async function executeTaskWithQuality(
             feedback: `Task 執行失敗：${taskResult.error ?? "未知錯誤"}`,
           };
         }
+        if (taskResult.status === "blocked") {
+          return {
+            success: false,
+            cost_usd: taskResult.cost_usd ?? 0,
+            feedback: `Task 被阻塞：${taskResult.block_reason ?? "未知原因"}。建議升級模型或拆分任務。`,
+          };
+        }
+        if (taskResult.status === "needs_context") {
+          return {
+            success: false,
+            cost_usd: taskResult.cost_usd ?? 0,
+            feedback: `Task 需要更多上下文：${taskResult.needed_context ?? "未說明"}。請提供所需資訊後重試。`,
+          };
+        }
 
         // 2. Quality Gate
         const gateResult = await runQualityGate(task, qc, {
-          cwd: options.cwd,
+          cwd: taskCwd,
           shellExecutor: defaultShellExecutor,
           onProgress: options.onProgress,
         });
@@ -472,21 +546,21 @@ async function executeTaskWithQuality(
           };
         }
 
-        // 3. Judge（依 policy）
+        // 3. 雙階段 Judge（借鑑 Superpowers：Spec Compliance → Code Quality）
         const needJudge = shouldRunJudge(qc.judge_policy, task, true);
         if (needJudge) {
-          options.onProgress?.(`[${task.id}] 啟動 Judge 審查`);
-          const judgeResult = await runJudge(task, taskResult, {
-            cwd: options.cwd,
+          options.onProgress?.(`[${task.id}] 啟動雙階段 Judge 審查`);
+          const judgeResult = await runDualStageJudge(task, taskResult, {
+            cwd: taskCwd,
             onProgress: options.onProgress,
           });
 
           if (judgeResult.verdict === "REJECT") {
-            options.onProgress?.(`[${task.id}] Judge REJECT（attempt ${attempt}）`);
+            options.onProgress?.(`[${task.id}] Judge REJECT（${judgeResult.review_stage} 階段, attempt ${attempt}）`);
             return {
               success: false,
               cost_usd: (taskResult.cost_usd ?? 0) + (judgeResult.cost_usd ?? 0),
-              feedback: `Judge 審查未通過：${judgeResult.reasoning}`,
+              feedback: `Judge 審查未通過（${judgeResult.review_stage} 階段）：${judgeResult.reasoning}`,
             };
           }
         }
@@ -505,6 +579,16 @@ async function executeTaskWithQuality(
   const retryCount = fixLoopResult.attempts.length - 1;
 
   if (fixLoopResult.success) {
+    // Worktree 合併
+    if (worktreeManager) {
+      try {
+        await worktreeManager.merge(task.id);
+        options.onProgress?.(`[${task.id}] worktree 已合併`);
+      } catch (error) {
+        options.onProgress?.(`[${task.id}] worktree 合併失敗: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+
     options.onProgress?.(`[${task.id}] 完成：success${retryCount > 0 ? `（重試 ${retryCount} 次）` : ""}`);
     return {
       task_id: task.id,
@@ -597,6 +681,9 @@ function buildSummary(results: TaskResult[], totalDuration: number): ExecutionSu
     failed: 0,
     skipped: 0,
     timeout: 0,
+    done_with_concerns: 0,
+    needs_context: 0,
+    blocked: 0,
   };
 
   let totalCost = 0;
@@ -610,6 +697,9 @@ function buildSummary(results: TaskResult[], totalDuration: number): ExecutionSu
     succeeded: statusCounts.success,
     failed: statusCounts.failed + statusCounts.timeout,
     skipped: statusCounts.skipped,
+    done_with_concerns: statusCounts.done_with_concerns,
+    needs_context: statusCounts.needs_context,
+    blocked: statusCounts.blocked,
     total_cost_usd: totalCost,
     total_duration_ms: totalDuration,
   };
@@ -620,7 +710,7 @@ function buildSummary(results: TaskResult[], totalDuration: number): ExecutionSu
  */
 function buildQualityMetrics(results: TaskResult[]): import("./types.js").QualityMetrics {
   const executed = results.filter((r) => r.status !== "skipped");
-  const succeeded = results.filter((r) => r.status === "success");
+  const succeeded = results.filter((r) => r.status === "success" || r.status === "done_with_concerns");
   const total = executed.length || 1; // 避免除以零
 
   const totalRetries = results.reduce((sum, r) => sum + (r.retry_count ?? 0), 0);

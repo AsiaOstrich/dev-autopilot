@@ -50,6 +50,11 @@ export class WorktreeManager {
   /**
    * 為指定 task 建立 git worktree
    *
+   * 包含 Superpowers 借鑑的安全驗證步驟：
+   * 1. 確保 worktree 目錄存在
+   * 2. 確認目錄在 .gitignore 中
+   * 3. 建立 worktree + 新分支
+   *
    * @param taskId - Task ID（如 T-001）
    * @returns worktree 資訊
    */
@@ -59,6 +64,9 @@ export class WorktreeManager {
 
     // 確保 worktree 目錄存在
     await mkdir(this.worktreeDir, { recursive: true });
+
+    // 安全檢查：確認 worktree 目錄被 .gitignore 忽略（借鑑 Superpowers）
+    await this.ensureGitIgnored();
 
     // 建立 worktree + 新分支
     await this.git(["worktree", "add", worktreePath, "-b", branch]);
@@ -71,6 +79,30 @@ export class WorktreeManager {
     this.worktrees.set(taskId, info);
 
     return info;
+  }
+
+  /**
+   * 確認 worktree 目錄在 .gitignore 中（借鑑 Superpowers 安全驗證）
+   *
+   * 若未被忽略，自動加入 .gitignore。
+   */
+  private async ensureGitIgnored(): Promise<void> {
+    try {
+      const { stdout } = await this.git(["check-ignore", "-q", this.worktreeDir]);
+      // 如果指令成功（exit code 0），表示已被忽略
+    } catch {
+      // 未被忽略或指令失敗 — 嘗試檢查並加入 .gitignore
+      const { readFile, appendFile } = await import("node:fs/promises");
+      const gitignorePath = join(this.rootDir, ".gitignore");
+      try {
+        const content = await readFile(gitignorePath, "utf-8");
+        if (!content.includes(".devap/worktrees")) {
+          await appendFile(gitignorePath, "\n# DevAP worktrees (auto-added)\n.devap/worktrees/\n");
+        }
+      } catch {
+        // .gitignore 不存在或無法讀取，跳過
+      }
+    }
   }
 
   /**

@@ -421,3 +421,63 @@ describe("runQualityGate — completion_criteria", () => {
     expect(shell).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("runQualityGate — 驗證證據（Superpowers Iron Law）", () => {
+  it("通過時應收集所有步驟的驗證證據", async () => {
+    const shell = mockShell({ "pnpm test": 0, "eslint .": 0 });
+    const qc: QualityConfig = { ...baseQuality, lint_command: "eslint ." };
+    const result = await runQualityGate(baseTask, qc, {
+      cwd: "/tmp",
+      shellExecutor: shell,
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.evidence).toHaveLength(2);
+    expect(result.evidence[0].command).toBe("pnpm test");
+    expect(result.evidence[0].exit_code).toBe(0);
+    expect(result.evidence[0].timestamp).toBeTruthy();
+    expect(result.evidence[1].command).toBe("eslint .");
+  });
+
+  it("失敗時也應收集已執行步驟的證據", async () => {
+    const shell = mockShell({ "pnpm test": 0, "eslint .": 1 });
+    const qc: QualityConfig = { ...baseQuality, lint_command: "eslint ." };
+    const result = await runQualityGate(baseTask, qc, {
+      cwd: "/tmp",
+      shellExecutor: shell,
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.evidence).toHaveLength(2);
+    expect(result.evidence[0].exit_code).toBe(0);
+    expect(result.evidence[1].exit_code).toBe(1);
+  });
+
+  it("無步驟時 evidence 為空陣列", async () => {
+    const shell = mockShell({});
+    const qc: QualityConfig = { ...baseQuality, verify: false };
+    const result = await runQualityGate(baseTask, qc, {
+      cwd: "/tmp",
+      shellExecutor: shell,
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.evidence).toHaveLength(0);
+  });
+
+  it("evidence 的 output 應被截斷至合理長度", async () => {
+    const shell: ShellExecutor = vi.fn(async () => ({
+      exitCode: 0,
+      stdout: "x".repeat(5000),
+      stderr: "",
+    }));
+    const result = await runQualityGate(baseTask, baseQuality, {
+      cwd: "/tmp",
+      shellExecutor: shell,
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.evidence).toHaveLength(1);
+    expect(result.evidence[0].output.length).toBeLessThanOrEqual(2000);
+  });
+});

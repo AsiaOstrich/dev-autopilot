@@ -524,6 +524,161 @@ describe("orchestrate（品質模式）", () => {
   });
 });
 
+describe("orchestrate（Implementer 狀態協定 — Superpowers 借鑑）", () => {
+  it("done_with_concerns 狀態應記錄 concerns 並允許後續 task 繼續", async () => {
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => {
+        if (task.id === "T-001") {
+          return {
+            task_id: task.id,
+            status: "done_with_concerns",
+            concerns: ["效能可能不佳"],
+            cost_usd: 0.5,
+          };
+        }
+        return { task_id: task.id, status: "success", cost_usd: 0.3 };
+      }),
+    });
+
+    const plan: TaskPlan = {
+      project: "test",
+      tasks: [
+        { id: "T-001", title: "A", spec: "do it" },
+        { id: "T-002", title: "B", spec: "follow", depends_on: ["T-001"] },
+      ],
+    };
+
+    const report = await orchestrate(plan, adapter, defaultOptions);
+
+    // done_with_concerns 不阻塞後續 task
+    expect(report.tasks[0].status).toBe("done_with_concerns");
+    expect(report.tasks[1].status).toBe("success");
+    expect(report.summary.done_with_concerns).toBe(1);
+    expect(report.summary.succeeded).toBe(1);
+  });
+
+  it("blocked 狀態在品質模式中應被 fix loop 處理", async () => {
+    let callCount = 0;
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            task_id: task.id,
+            status: "blocked",
+            block_reason: "需要資料庫存取權限",
+            cost_usd: 0.3,
+          };
+        }
+        return { task_id: task.id, status: "success", cost_usd: 0.3 };
+      }),
+    });
+
+    const retryQuality: QualityConfig = {
+      verify: false,
+      judge_policy: "never",
+      max_retries: 1,
+      max_retry_budget_usd: 2.0,
+    };
+
+    const plan: TaskPlan = {
+      project: "test",
+      tasks: [{ id: "T-001", title: "A", spec: "do it" }],
+    };
+
+    const report = await orchestrate(plan, adapter, {
+      ...defaultOptions,
+      qualityConfig: retryQuality,
+    });
+
+    expect(report.summary.succeeded).toBe(1);
+    expect(report.tasks[0].retry_count).toBe(1);
+  });
+
+  it("needs_context 狀態在品質模式中應被 fix loop 處理", async () => {
+    let callCount = 0;
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            task_id: task.id,
+            status: "needs_context",
+            needed_context: "需要 API 文件",
+            cost_usd: 0.2,
+          };
+        }
+        return { task_id: task.id, status: "success", cost_usd: 0.3 };
+      }),
+    });
+
+    const retryQuality: QualityConfig = {
+      verify: false,
+      judge_policy: "never",
+      max_retries: 1,
+      max_retry_budget_usd: 2.0,
+    };
+
+    const plan: TaskPlan = {
+      project: "test",
+      tasks: [{ id: "T-001", title: "A", spec: "do it" }],
+    };
+
+    const report = await orchestrate(plan, adapter, {
+      ...defaultOptions,
+      qualityConfig: retryQuality,
+    });
+
+    expect(report.summary.succeeded).toBe(1);
+    expect(report.tasks[0].retry_count).toBe(1);
+  });
+
+  it("model_tier 應透過 ExecuteOptions 傳遞", async () => {
+    let receivedModelTier: string | undefined;
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task, opts: ExecuteOptions): Promise<TaskResult> => {
+        receivedModelTier = opts.modelTier;
+        return { task_id: task.id, status: "success", cost_usd: 0.3 };
+      }),
+    });
+
+    const plan: TaskPlan = {
+      project: "test",
+      tasks: [{ id: "T-001", title: "A", spec: "do it", model_tier: "capable" }],
+    };
+
+    await orchestrate(plan, adapter, defaultOptions);
+    expect(receivedModelTier).toBe("capable");
+  });
+
+  it("ExecutionSummary 應包含新狀態的計數", async () => {
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => {
+        const statuses: Record<string, TaskResult> = {
+          "T-001": { task_id: "T-001", status: "success", cost_usd: 0.1 },
+          "T-002": { task_id: "T-002", status: "done_with_concerns", concerns: ["x"], cost_usd: 0.1 },
+          "T-003": { task_id: "T-003", status: "blocked", block_reason: "y", cost_usd: 0.1 },
+        };
+        return statuses[task.id] ?? { task_id: task.id, status: "failed" };
+      }),
+    });
+
+    const plan: TaskPlan = {
+      project: "test",
+      tasks: [
+        { id: "T-001", title: "A", spec: "a" },
+        { id: "T-002", title: "B", spec: "b" },
+        { id: "T-003", title: "C", spec: "c" },
+      ],
+    };
+
+    const report = await orchestrate(plan, adapter, defaultOptions);
+    expect(report.summary.succeeded).toBe(1);
+    expect(report.summary.done_with_concerns).toBe(1);
+    expect(report.summary.blocked).toBe(1);
+  });
+});
+
 describe("orchestrate（Checkpoint）", () => {
   it("checkpoint_policy=never → 不呼叫 onCheckpoint", async () => {
     const adapter = createMockAdapter();

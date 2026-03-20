@@ -8,7 +8,7 @@
  * 純邏輯、透過回呼函式與外部互動。
  */
 
-import type { FixLoopAttempt, FixLoopConfig, FixLoopResult } from "./types.js";
+import type { FixFeedback, FixLoopAttempt, FixLoopConfig, FixLoopResult } from "./types.js";
 
 /**
  * 單次執行函式的回傳值
@@ -20,6 +20,8 @@ export interface ExecuteResult {
   cost_usd: number;
   /** 錯誤回饋（失敗時，將注入下次重試的 prompt） */
   feedback?: string;
+  /** 結構化除錯回饋（借鑑 Superpowers 四階段除錯法） */
+  structured_feedback?: FixFeedback;
 }
 
 /**
@@ -61,6 +63,8 @@ export async function runFixLoop(
   const attempts: FixLoopAttempt[] = [];
   let totalRetryCost = 0;
   let lastFeedback: string | undefined;
+  let consecutiveFailures = 0;
+  const previousHypotheses: Array<{ hypothesis: string; result: string }> = [];
 
   // 首次執行 + 重試（最多 1 + max_retries 次）
   const maxAttempts = 1 + config.max_retries;
@@ -83,6 +87,13 @@ export async function runFixLoop(
       }
 
       callbacks.onProgress?.(`第 ${i} 次嘗試（重試 ${i - 1}/${config.max_retries}）`);
+
+      // 借鑑 Superpowers 四階段除錯法：構建結構化回饋
+      lastFeedback = buildStructuredFeedback(
+        lastFeedback ?? "",
+        consecutiveFailures,
+        previousHypotheses,
+      );
     }
 
     const result = await callbacks.execute(lastFeedback, i);
@@ -96,6 +107,7 @@ export async function runFixLoop(
     attempts.push(attempt);
 
     if (result.success) {
+      consecutiveFailures = 0;
       return {
         success: true,
         attempts,
@@ -109,6 +121,13 @@ export async function runFixLoop(
       totalRetryCost += result.cost_usd;
     }
 
+    consecutiveFailures++;
+    // 記錄失敗假設供後續分析
+    previousHypotheses.push({
+      hypothesis: `attempt ${i}`,
+      result: result.feedback ?? "未知錯誤",
+    });
+
     lastFeedback = result.feedback;
   }
 
@@ -118,4 +137,70 @@ export async function runFixLoop(
     total_retry_cost_usd: totalRetryCost,
     stop_reason: "max_retries",
   };
+}
+
+/**
+ * 構建結構化除錯回饋（借鑑 Superpowers 四階段除錯法）
+ *
+ * 根據連續失敗次數決定除錯階段：
+ * - 1 次失敗：Root Cause Investigation — 分析錯誤訊息，找出根因
+ * - 2 次失敗：Pattern Analysis — 比對同類成功案例
+ * - 3+ 次失敗：Architecture Questioning — 停止猜測，質疑架構設計
+ *
+ * Superpowers 的「3 次失敗規則」：連續 3 次修復失敗 → 質疑架構，停止猜測。
+ */
+export function buildStructuredFeedback(
+  rawFeedback: string,
+  consecutiveFailures: number,
+  previousAttempts: Array<{ hypothesis: string; result: string }>,
+): string {
+  const sections: string[] = [rawFeedback];
+
+  if (consecutiveFailures >= 3) {
+    // Superpowers 3 次失敗規則：質疑架構
+    sections.push(
+      "",
+      "---",
+      "## ⚠️ 架構問題升級（Superpowers 3-Strike Rule）",
+      "",
+      "已連續失敗 3 次以上。**停止猜測性修復**，請：",
+      "1. 質疑目前的架構設計是否正確",
+      "2. 回顧所有先前嘗試，找出共同失敗模式",
+      "3. 考慮是否需要重新設計方案而非修補",
+      "",
+      "### 先前嘗試記錄",
+      ...previousAttempts.map((a) => `- **${a.hypothesis}**: ${a.result.slice(0, 200)}`),
+      "",
+      "Red Flags：如果你想到「quick fix」、「just try」、「should work now」→ 停下來，回到根因分析。",
+    );
+  } else if (consecutiveFailures >= 2) {
+    // Pattern Analysis 階段
+    sections.push(
+      "",
+      "---",
+      "## 除錯指引：Pattern Analysis（第 2 階段）",
+      "",
+      "前次修復未解決問題。請：",
+      "1. 比對同類成功案例的模式",
+      "2. 檢查是否遺漏了某個前置條件",
+      "3. 用最小化修改驗證假設",
+      "",
+      "### 先前嘗試",
+      ...previousAttempts.map((a) => `- **${a.hypothesis}**: ${a.result.slice(0, 200)}`),
+    );
+  } else {
+    // Root Cause Investigation 階段
+    sections.push(
+      "",
+      "---",
+      "## 除錯指引：Root Cause Investigation（第 1 階段）",
+      "",
+      "請先分析根因再修復，不要直接猜測：",
+      "1. 仔細閱讀錯誤訊息，定位出錯的精確位置",
+      "2. 追蹤變更記錄，找出是哪個修改引入了問題",
+      "3. 在元件邊界加診斷觀測，定位故障層",
+    );
+  }
+
+  return sections.join("\n");
 }
