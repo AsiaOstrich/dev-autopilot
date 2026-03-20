@@ -5,6 +5,7 @@ from devap.models.types import (
     AgentAdapter,
     ExecuteOptions,
     Task,
+    TaskDefaults,
     TaskPlan,
     TaskResult,
 )
@@ -81,7 +82,7 @@ class TestMergeDefaults:
     def test_defaults_applied(self):
         plan = TaskPlan(
             project="test",
-            defaults={"max_turns": 50, "max_budget_usd": 3.0},
+            defaults=TaskDefaults(max_turns=50, max_budget_usd=3.0),
             tasks=[Task(id="T-001", title="A", spec="a")],
         )
         merged = merge_defaults(plan.tasks[0], plan)
@@ -91,7 +92,7 @@ class TestMergeDefaults:
     def test_task_overrides_defaults(self):
         plan = TaskPlan(
             project="test",
-            defaults={"max_turns": 50},
+            defaults=TaskDefaults(max_turns=50),
             tasks=[Task(id="T-001", title="A", spec="a", max_turns=10)],
         )
         merged = merge_defaults(plan.tasks[0], plan)

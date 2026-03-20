@@ -9,12 +9,11 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import defaultdict, deque
-from typing import Optional
+from typing import Callable, Optional
 
 from devap.hooks.safety_hook import SafetyHook
 from devap.models.types import (
     AgentAdapter,
-    CheckpointAction,
     CheckpointCallback,
     CheckpointPolicy,
     CheckpointSummary,
@@ -128,7 +127,7 @@ async def orchestrate(
     cwd: str,
     *,
     session_id: Optional[str] = None,
-    on_progress: Optional[callable] = None,
+    on_progress: Optional[Callable[[str], None]] = None,
     safety_hooks: Optional[list[SafetyHook]] = None,
     parallel: bool = False,
     max_parallel: Optional[int] = None,
@@ -183,7 +182,7 @@ async def _orchestrate_sequential(
     adapter: AgentAdapter,
     cwd: str,
     session_id: Optional[str],
-    on_progress: Optional[callable],
+    on_progress: Optional[Callable[[str], None]],
     safety_hooks: Optional[list[SafetyHook]],
     quality_config: Optional[QualityConfig],
     checkpoint_policy: CheckpointPolicy,
@@ -226,7 +225,7 @@ async def _orchestrate_parallel(
     adapter: AgentAdapter,
     cwd: str,
     session_id: Optional[str],
-    on_progress: Optional[callable],
+    on_progress: Optional[Callable[[str], None]],
     safety_hooks: Optional[list[SafetyHook]],
     max_parallel: Optional[int],
     quality_config: Optional[QualityConfig],
@@ -280,7 +279,7 @@ async def _execute_one_task(
     adapter: AgentAdapter,
     cwd: str,
     session_id: Optional[str],
-    on_progress: Optional[callable],
+    on_progress: Optional[Callable[[str], None]],
     safety_hooks: Optional[list[SafetyHook]],
     completed: dict[str, TaskResult],
     quality_config: Optional[QualityConfig],

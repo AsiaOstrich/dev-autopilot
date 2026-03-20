@@ -8,7 +8,6 @@ devap 核心型別定義
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from enum import Enum
 from typing import Awaitable, Callable, Literal, Optional
 
 from pydantic import BaseModel, Field

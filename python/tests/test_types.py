@@ -5,9 +5,6 @@ from devap.models.types import (
     Task,
     TaskPlan,
     TaskResult,
-    ExecuteOptions,
-    QualityConfig,
-    FixLoopConfig,
     VerificationEvidence,
     ExecutionSummary,
 )

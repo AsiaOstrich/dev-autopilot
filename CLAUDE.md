@@ -105,7 +105,7 @@ mypy .
 
 - 完整研究：docs/research/feasibility-and-design.md
 - Task Plan Schema：specs/task-schema.json
-- Adapter 開發指南：docs/adapter-guide.md（待建立）
+- Adapter 開發指南：[docs/adapter-guide.md](docs/adapter-guide.md)
 
 ## 三層產品架構
 

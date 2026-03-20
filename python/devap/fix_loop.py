@@ -8,7 +8,7 @@ Fix Loop — 自動修復迴圈
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Optional
+from typing import Awaitable, Callable, Literal, Optional
 
 from devap.models.types import FixLoopAttempt, FixLoopConfig, FixLoopResult
 
@@ -104,7 +104,7 @@ async def run_fix_loop(
         last_feedback = result.feedback
 
     # 判定停止原因
-    stop_reason = (
+    stop_reason: Literal["budget_exceeded", "max_retries"] = (
         "budget_exceeded"
         if total_retry_cost >= config.max_retry_budget_usd and len(attempts) < max_attempts
         else "max_retries"
