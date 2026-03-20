@@ -1,6 +1,12 @@
 # macOS
 .DS_Store
 
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+
 # Logs
 logs
 *.log
