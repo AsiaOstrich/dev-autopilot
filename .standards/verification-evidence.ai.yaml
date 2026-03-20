@@ -1,0 +1,61 @@
+# Verification Evidence Standard - AI Optimized
+# Inspired by Superpowers verification-before-completion
+
+standard:
+  id: verification-evidence
+  name: Verification Evidence Standard
+  description: 驗證證據標準，強化 anti-hallucination
+
+  meta:
+    version: "1.0.0"
+    updated: "2026-03-20"
+    source: superpowers/verification-before-completion
+    description: 驗證證據標準 — Iron Law: 無驗證證據不可聲稱完成
+
+  guidelines:
+    - "Iron Law：無驗證證據 = 不可聲稱完成"
+    - "每次驗證必須記錄 command + exitCode + output + timestamp"
+    - "回歸測試必須展示 RED → GREEN 循環"
+    - "代理報告 success ≠ 實際 success，需獨立驗證"
+    - "驗證輸出截斷至合理長度（2000 字元）但保留關鍵資訊"
+
+  evidence_format:
+    fields:
+      - name: command
+        type: string
+        required: true
+        description: "實際執行的驗證指令"
+      - name: exit_code
+        type: number
+        required: true
+        description: "指令退出碼（0 = 成功）"
+      - name: output
+        type: string
+        required: true
+        description: "驗證輸出（截斷至 2000 字元）"
+      - name: timestamp
+        type: string
+        required: true
+        description: "執行時間（ISO 8601 格式）"
+
+  red_green_cycle:
+    description: "回歸測試的 RED → GREEN 驗證"
+    steps:
+      - "RED: 在修復前執行測試，確認測試確實失敗"
+      - "修復問題"
+      - "GREEN: 再次執行測試，確認測試通過"
+      - "記錄 RED 和 GREEN 兩個階段的證據"
+
+  trust_rules:
+    - "代理聲稱「已完成」→ 檢查 verification_evidence 是否存在"
+    - "verification_evidence 為空 → 標記為未驗證"
+    - "exit_code ≠ 0 → 標記為驗證失敗"
+    - "多個驗證步驟 → 所有步驟都必須通過"
+
+  rules:
+    - trigger: "代理回報 success 但無 verification_evidence"
+      action: "降級為 done_with_concerns"
+      priority: critical
+    - trigger: "exit_code ≠ 0"
+      action: "標記驗證失敗，啟動 fix loop"
+      priority: high

@@ -1,0 +1,54 @@
+# Git Worktree Isolation - AI Optimized
+# Inspired by Superpowers using-git-worktrees
+
+standard:
+  id: git-worktree
+  name: Git Worktree Isolation
+  description: Git Worktree 隔離開發標準
+
+  meta:
+    version: "1.0.0"
+    updated: "2026-03-20"
+    source: superpowers/using-git-worktrees
+    description: Git Worktree 隔離開發與生命週期管理標準
+
+  guidelines:
+    - "worktree 目錄必須在 .gitignore 中"
+    - "建立後跑基準測試確認環境乾淨"
+    - "完成後先合併再清理"
+    - "異常退出時確保 cleanup 被執行"
+
+  lifecycle:
+    - phase: setup
+      steps:
+        - "選擇 worktree 目錄位置（優先順序：existing → .devap/worktrees → 詢問使用者）"
+        - "執行 git check-ignore 確認目錄被忽略"
+        - "建立 worktree + 新分支"
+        - "安裝依賴（若需要）"
+    - phase: baseline
+      steps:
+        - "在 worktree 中跑基準測試"
+        - "確認測試全過（環境乾淨）"
+        - "若測試失敗，中止並報告"
+    - phase: execute
+      steps:
+        - "在隔離的 worktree 中執行任務"
+        - "任務完成後驗證"
+    - phase: merge
+      steps:
+        - "確認所有測試通過"
+        - "合併分支回主分支（--no-ff）"
+        - "處理可能的合併衝突"
+    - phase: cleanup
+      steps:
+        - "移除 worktree（git worktree remove）"
+        - "刪除分支（git branch -d）"
+        - "prune 殘留 worktree（git worktree prune）"
+
+  rules:
+    - trigger: "worktree 目錄不在 .gitignore 中"
+      action: "自動加入 .gitignore"
+      priority: critical
+    - trigger: "基準測試失敗"
+      action: "中止任務，報告環境問題"
+      priority: high
