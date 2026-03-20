@@ -74,6 +74,11 @@ pnpm build
 pnpm test
 pnpm lint
 
+# UDS 標準同步
+devap sync-standards           # 從 upstream 拉最新版
+devap sync-standards --check   # 僅檢查版本（CI 用）
+devap sync-standards --force   # 強制覆蓋本地修改
+
 # Python
 cd python && pip install -e ".[dev]"
 pytest
@@ -95,6 +100,46 @@ mypy .
 - 完整研究：docs/research/feasibility-and-design.md
 - Task Plan Schema：specs/task-schema.json
 - Adapter 開發指南：docs/adapter-guide.md（待建立）
+
+## 跨產品整合策略
+
+DevAP 在 AsiaOstrich 三層產品架構中定位為**編排執行層**：
+
+```
+UDS (標準定義) ──→ DevAP (編排執行) ──→ VibeOps (全生命週期)
+  MIT + CC BY 4.0     Apache-2.0          AGPL-3.0-only
+```
+
+### 整合原則
+
+1. **授權隔離**：DevAP 維持 Apache-2.0，不引入 AGPL 依賴
+2. **Agent-agnostic**：VibeOps 是 DevAP 的消費者之一，不是唯一消費者
+3. **介面驅動**：`AgentAdapter` interface 是整合點，VibeOps 實作此介面
+
+### DevAP 在 VibeOps Pipeline 中的角色
+
+VibeOps 可透過 Service Connector 呼叫 DevAP 的以下能力：
+
+| 能力 | 操作 | 說明 |
+|------|------|------|
+| `devap.orchestrate` | run, validate, resolve | DAG 任務編排 |
+| `devap.quality-gate` | check, profile | 品質閘門檢查 |
+| `devap.fix-loop` | run, status | 自動修復迴圈 |
+
+### VibeOps Adapter Pattern
+
+VibeOps 7+1 agents 透過 `AgentAdapter` 映射為 DevAP tasks：
+
+| VibeOps Agent | DevAP Task 映射 |
+|---------------|----------------|
+| Planner | T-001: 需求分析 |
+| Architect | T-002: 架構決策（depends_on: T-001） |
+| Designer | T-003: 規格設計（depends_on: T-002） |
+| Builder | T-005: 實作（depends_on: T-003） |
+| Reviewer | T-006: 品質審查（depends_on: T-005） |
+| Operator | T-007: 部署（depends_on: T-006） |
+| Evaluator | T-008: 評估（depends_on: T-007） |
+| Guardian | 跨切面 hook |
 
 ---
 

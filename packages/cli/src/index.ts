@@ -9,6 +9,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Command } from "commander";
 import { registerInitCommand } from "./commands/init.js";
+import { registerSyncStandardsCommand } from "./commands/sync-standards.js";
 import {
   orchestrate,
   validatePlan,
@@ -124,5 +125,6 @@ program
   });
 
 registerInitCommand(program);
+registerSyncStandardsCommand(program);
 
 program.parse();

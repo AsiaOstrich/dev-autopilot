@@ -1,0 +1,84 @@
+name: Check UDS Standards Version
+
+on:
+  # 每週一 UTC 09:00 自動檢查
+  schedule:
+    - cron: "0 9 * * 1"
+  # 手動觸發
+  workflow_dispatch:
+  # PR 時檢查 manifest 是否有變更
+  pull_request:
+    paths:
+      - ".standards/manifest.json"
+
+jobs:
+  check-standards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 讀取 manifest.json
+        id: manifest
+        run: |
+          CURRENT=$(jq -r '.upstream.version' .standards/manifest.json)
+          REPO=$(jq -r '.upstream.repo' .standards/manifest.json)
+          INSTALLED=$(jq -r '.upstream.installed' .standards/manifest.json)
+          SKILLS_VER=$(jq -r '.skills.version // "N/A"' .standards/manifest.json)
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "repo=$REPO" >> "$GITHUB_OUTPUT"
+          echo "installed=$INSTALLED" >> "$GITHUB_OUTPUT"
+          echo "skills_version=$SKILLS_VER" >> "$GITHUB_OUTPUT"
+
+      - name: 取得上游最新版本
+        id: upstream
+        run: |
+          LATEST=$(curl -s "https://api.github.com/repos/${{ steps.manifest.outputs.repo }}/releases/latest" \
+            -H "Accept: application/vnd.github.v3+json" | jq -r '.tag_name // empty')
+          if [ -z "$LATEST" ]; then
+            LATEST=$(curl -s "https://api.github.com/repos/${{ steps.manifest.outputs.repo }}/tags?per_page=1" \
+              -H "Accept: application/vnd.github.v3+json" | jq -r '.[0].name // empty')
+          fi
+          LATEST="${LATEST#v}"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: 比對版本
+        run: |
+          echo "📋 本地版本：${{ steps.manifest.outputs.current }}"
+          echo "🏷️  上游版本：${{ steps.upstream.outputs.latest }}"
+          echo "📅 安裝日期：${{ steps.manifest.outputs.installed }}"
+          echo "🔧 Skills 版本：${{ steps.manifest.outputs.skills_version }}"
+
+          CURRENT="${{ steps.manifest.outputs.current }}"
+          LATEST="${{ steps.upstream.outputs.latest }}"
+
+          if [ -z "$LATEST" ]; then
+            echo "⚠️  無法取得上游版本（repo 可能尚未發布 release）"
+            exit 0
+          fi
+
+          # 簡易 semver 比對（去掉 pre-release 後比較）
+          CURRENT_CLEAN=$(echo "$CURRENT" | sed 's/-.*//')
+          LATEST_CLEAN=$(echo "$LATEST" | sed 's/-.*//')
+
+          if [ "$CURRENT_CLEAN" = "$LATEST_CLEAN" ]; then
+            echo "✅ 標準版本已是最新"
+          else
+            echo "⬆️  發現新版本：$CURRENT → $LATEST"
+            echo "💡 請執行 devap sync-standards 或 npx uds init 更新"
+          fi
+
+      - name: 檢查 Skills 版本對齊
+        run: |
+          STANDARDS_VER="${{ steps.manifest.outputs.current }}"
+          SKILLS_VER="${{ steps.manifest.outputs.skills_version }}"
+
+          if [ "$SKILLS_VER" = "N/A" ]; then
+            echo "ℹ️  未安裝 Skills"
+            exit 0
+          fi
+
+          if [ "$STANDARDS_VER" = "$SKILLS_VER" ]; then
+            echo "✅ Skills 版本與標準版本對齊（$SKILLS_VER）"
+          else
+            echo "⚠️  Skills 版本（$SKILLS_VER）與標準版本（$STANDARDS_VER）不一致"
+          fi
