@@ -1,17 +1,16 @@
 {
-  "name": "@devap/adapter-opencode",
+  "name": "@devap/adapter-vibeops",
   "version": "0.2.0",
-  "description": "OpenCode SDK adapter for devap",
+  "description": "VibeOps adapter for devap — integrates VibeOps 7+1 agents via HTTP API",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "^1.2.16",
     "@devap/core": "workspace:*"
   },
   "devDependencies": {

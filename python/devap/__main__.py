@@ -25,7 +25,7 @@ def _create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.1.0",
+        version="%(prog)s 0.2.0",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="子指令")
@@ -58,6 +58,39 @@ def _create_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="最大並行任務數",
+    )
+
+    # init 指令
+    init_parser = subparsers.add_parser("init", help="安裝 devap Skills 到目標專案")
+    init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="強制覆蓋已存在的 skills",
+    )
+    init_parser.add_argument(
+        "--target",
+        default=".",
+        help="指定目標專案路徑（預設當前目錄）",
+    )
+
+    # sync-standards 指令
+    sync_parser = subparsers.add_parser(
+        "sync-standards", help="從 UDS upstream 同步最新標準"
+    )
+    sync_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="僅檢查版本是否落後（不執行同步，適合 CI）",
+    )
+    sync_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="強制覆蓋本地修改",
+    )
+    sync_parser.add_argument(
+        "--target",
+        default=".",
+        help="指定目標專案路徑（預設當前目錄）",
     )
 
     return parser
@@ -126,6 +159,16 @@ def _create_adapter(agent_type: str) -> AgentAdapter:
 
         return CliAdapter()
 
+    if agent_type == "claude":
+        from devap.adapters.claude_adapter import ClaudeAdapter
+
+        return ClaudeAdapter()
+
+    if agent_type == "opencode":
+        from devap.adapters.opencode_adapter import OpenCodeAdapter
+
+        return OpenCodeAdapter()
+
     raise ValueError(f"不支援的 agent 類型: {agent_type}")
 
 
@@ -140,6 +183,30 @@ def main() -> NoReturn:
 
     if args.command == "run":
         exit_code = asyncio.run(_run_command(args))
+        sys.exit(exit_code)
+
+    if args.command == "init":
+        from devap.commands.init_cmd import execute_init
+
+        try:
+            execute_init(force=args.force, target=args.target)
+        except Exception as e:
+            print(f"❌ 初始化失敗：{e}", file=sys.stderr)
+            sys.exit(1)
+        sys.exit(0)
+
+    if args.command == "sync-standards":
+        from devap.commands.sync_standards import execute_sync_standards
+
+        try:
+            exit_code = execute_sync_standards(
+                check=args.check,
+                force=args.force,
+                target=args.target,
+            )
+        except Exception as e:
+            print(f"❌ 同步失敗：{e}", file=sys.stderr)
+            sys.exit(1)
         sys.exit(exit_code)
 
     parser.print_help()

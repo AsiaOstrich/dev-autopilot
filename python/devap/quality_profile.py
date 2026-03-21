@@ -6,7 +6,9 @@ Quality Profile — 品質預設模板
 
 from __future__ import annotations
 
-from devap.models.types import QualityConfig, QualityProfileName
+from typing import Optional
+
+from devap.models.types import QualityConfig, QualityProfileName, TestPolicy
 
 PROFILES: dict[QualityProfileName, QualityConfig] = {
     "strict": QualityConfig(
@@ -38,20 +40,35 @@ PROFILES: dict[QualityProfileName, QualityConfig] = {
 
 def resolve_quality_profile(
     quality: QualityProfileName | QualityConfig | None,
+    test_policy: Optional[TestPolicy] = None,
 ) -> QualityConfig:
     """
     解析品質設定
 
+    將 profile 名稱展開為完整 QualityConfig，
+    並合併 test_policy 的 static_analysis_command 和 completion_criteria。
+
     Args:
         quality: profile 名稱或自訂 QualityConfig
+        test_policy: 測試策略（可選），會合併到 QualityConfig
 
     Returns:
         完整的 QualityConfig
     """
     if quality is None:
-        return PROFILES["none"].model_copy()
-    if isinstance(quality, QualityConfig):
-        return quality
-    if quality in PROFILES:
-        return PROFILES[quality].model_copy()
-    return PROFILES["none"].model_copy()
+        config = PROFILES["none"].model_copy()
+    elif isinstance(quality, QualityConfig):
+        config = quality
+    elif quality in PROFILES:
+        config = PROFILES[quality].model_copy()
+    else:
+        config = PROFILES["none"].model_copy()
+
+    # 合併 test_policy 到 QualityConfig（對齊 TS 端 quality-profile.ts）
+    if test_policy is not None:
+        if test_policy.static_analysis_command and not config.static_analysis_command:
+            config.static_analysis_command = test_policy.static_analysis_command
+        if test_policy.completion_criteria and not config.completion_criteria:
+            config.completion_criteria = test_policy.completion_criteria
+
+    return config

@@ -63,7 +63,7 @@ async def resolve_plan(
     validation = validate_plan(plan)
 
     # 解析 quality profile
-    quality_config = resolve_quality_profile(plan.quality)
+    quality_config = resolve_quality_profile(plan.quality, plan.test_policy)
 
     # 驗證失敗時仍回傳結構（含錯誤資訊），不 throw
     if not validation.valid:

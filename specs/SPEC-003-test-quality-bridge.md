@@ -100,7 +100,7 @@ ISO 29119-3 啟發的 Test Plan 模板，欄位可直接映射到 devap TaskPlan
 
 ---
 
-## Part B: devap 端修改
+## Part B: devap 端修改 ✅ Implemented
 
 ### B1. `packages/core/src/types.ts` — 型別擴充
 
