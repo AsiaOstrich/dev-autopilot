@@ -5,7 +5,6 @@ on:
     types: [published]
 
 jobs:
-  # 先跑完整 CI 確認品質
   ci:
     uses: ./.github/workflows/ci.yml
 
@@ -27,38 +26,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
-      # 依序 publish：core 先行（其他 package 依賴它）
-      - name: Publish @devap/core
-        working-directory: packages/core
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @devap/adapter-claude
-        working-directory: packages/adapter-claude
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @devap/adapter-cli
-        working-directory: packages/adapter-cli
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @devap/adapter-opencode
-        working-directory: packages/adapter-opencode
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @devap/adapter-vibeops
-        working-directory: packages/adapter-vibeops
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish dev-autopilot (CLI)
+      - name: Publish dev-autopilot
         working-directory: packages/cli
         run: npm publish --provenance
         env:
