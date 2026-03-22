@@ -17,6 +17,7 @@ import {
   type TaskPlan,
 } from "@devap/core";
 import { createAdapter } from "./adapter-factory.js";
+import { checkTermsAccepted, warnIfNoApiKey } from "./compliance.js";
 
 const program = new Command();
 
@@ -33,8 +34,11 @@ program
   .option("--parallel", "啟用並行模式（同層 tasks 並行執行）")
   .option("--max-parallel <n>", "最大並行任務數", parseInt)
   .option("--dry-run", "只驗證 plan + 檢查 adapter 可用性")
-  .action(async (opts: { plan: string; agent?: string; parallel?: boolean; maxParallel?: number; dryRun?: boolean }) => {
+  .option("--accept-terms", "靜默合規提醒（等同 DEVAP_ACCEPT_TERMS=1）")
+  .action(async (opts: { plan: string; agent?: string; parallel?: boolean; maxParallel?: number; dryRun?: boolean; acceptTerms?: boolean }) => {
     try {
+      // 合規告知（首次執行時顯示，之後靜默）
+      checkTermsAccepted(opts.acceptTerms);
       // 載入 plan
       const planPath = resolve(opts.plan);
       const planContent = await readFile(planPath, "utf-8");
@@ -51,8 +55,9 @@ program
       }
       console.log("✅ Plan 驗證通過");
 
-      // 決定 adapter
+      // 決定 adapter + 認證偵測
       const agentType = opts.agent ?? plan.agent ?? "claude";
+      warnIfNoApiKey(agentType);
       const adapter = createAdapter(agentType);
 
       // 檢查 adapter 可用性

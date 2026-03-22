@@ -33,6 +33,22 @@ class AgentAdapter(ABC):
         pass  # 可選
 ```
 
+## 認證與合規
+
+DevAP 自動化編排屬於 Anthropic **Commercial Terms** 範疇。各 adapter 的認證要求如下：
+
+| Adapter | 認證方式 | 環境變數 | 說明 |
+|---------|---------|---------|------|
+| `claude` (Agent SDK) | API key（必須） | `ANTHROPIC_API_KEY` | Agent SDK 禁止使用 OAuth token |
+| `cli` (Claude CLI) | API key（建議） | `ANTHROPIC_API_KEY` | CLI 支援多種認證，但自動化場景應使用 API key |
+| `opencode` | OpenCode 設定 | 依 OpenCode 文件 | 認證由 OpenCode SDK 管理 |
+| `vibeops` | HTTP API token | `config.apiToken` | 透過 HTTP 通訊，授權隔離 |
+
+> **重要**：Pro/Max 方案的 OAuth token 僅供個人互動使用，不適用於 DevAP 自動化編排。
+> 詳見 [Claude Code Legal](https://code.claude.com/docs/en/legal-and-compliance)。
+
+自訂 adapter 若呼叫 Anthropic API，同樣需遵守上述認證要求。
+
 ## 必須實作的方法
 
 ### `name`

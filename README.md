@@ -27,6 +27,38 @@ Agent-agnostic unattended development orchestrator.
 - **Safety Hooks** — Intercept dangerous commands (`rm -rf`, `DROP DATABASE`, `git push --force`)
 - **Claude Code Skills** — Integrated `/sdd` → `/plan` → `/orchestrate` workflow
 
+## Authentication & Compliance
+
+DevAP dispatches tasks to AI agents autonomously. This requires proper authentication:
+
+### Required: Anthropic API Key
+
+DevAP's automated orchestration falls under Anthropic's **Commercial Terms**. You must use an API key (not OAuth):
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+> **Important**: Pro/Max plan OAuth tokens are for personal interactive use only.
+> Automated orchestration via DevAP requires an API key from [Claude Console](https://console.anthropic.com/).
+
+### Applicable Policies
+
+| Policy | Link |
+|--------|------|
+| Commercial Terms | https://www.anthropic.com/legal/commercial-terms |
+| Usage Policy | https://www.anthropic.com/legal/aup |
+| Claude Code Legal | https://code.claude.com/docs/en/legal-and-compliance |
+
+### Cost Control
+
+DevAP provides multiple layers of cost protection:
+
+- **Task level**: `max_budget_usd` per task (default: $2.00)
+- **Plan level**: `max_total_budget_usd` for entire plan
+- **Fix Loop**: `max_retry_budget_usd` caps retry costs
+- **`--dry-run`**: Validate without executing
+
 ## Quick Start
 
 ### Option 1: npm Install (Recommended)

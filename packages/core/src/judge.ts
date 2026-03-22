@@ -342,6 +342,8 @@ async function spawnJudge(
   prompt: string,
   options: JudgeOptions,
 ): Promise<JudgeResult> {
+  // Judge 使用 default 權限模式（唯讀審查），不需要 acceptEdits。
+  // 這是刻意的設計選擇：Judge 只讀取 diff 和 verify output，不修改檔案。
   const args = [
     "-p",
     "--output-format", "json",

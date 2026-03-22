@@ -148,6 +148,8 @@ export interface TaskPlan {
   quality?: QualityProfileName | Partial<QualityConfig>;
   /** 測試策略定義（連結 UDS test-governance） */
   test_policy?: TestPolicy;
+  /** 整個 plan 的總預算上限（美元），超過即停止執行剩餘 tasks */
+  max_total_budget_usd?: number;
 }
 
 /**

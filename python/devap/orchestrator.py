@@ -192,8 +192,22 @@ async def _orchestrate_sequential(
     sorted_tasks = topological_sort(plan.tasks)
     results: list[TaskResult] = []
     completed: dict[str, TaskResult] = {}
+    total_cost_accum = 0.0
 
     for i, raw_task in enumerate(sorted_tasks):
+        # Plan 層級預算檢查（SPEC-005 AC-005-003）
+        if plan.max_total_budget_usd and total_cost_accum >= plan.max_total_budget_usd:
+            on_progress and on_progress(
+                f"⚠️ 總成本 ${total_cost_accum:.2f} 已達上限 ${plan.max_total_budget_usd}，停止執行"
+            )
+            for remaining in sorted_tasks[i:]:
+                results.append(TaskResult(
+                    task_id=remaining.id,
+                    status="skipped",
+                    error=f"Plan 總預算上限 ${plan.max_total_budget_usd} 已達到",
+                ))
+            break
+
         task = merge_defaults(raw_task, plan)
         result = await _execute_one_task(
             task, adapter, cwd, session_id, on_progress, safety_hooks,
@@ -201,6 +215,7 @@ async def _orchestrate_sequential(
         )
         results.append(result)
         completed[task.id] = result
+        total_cost_accum += result.cost_usd or 0
 
         # Checkpoint
         if (
@@ -237,8 +252,23 @@ async def _orchestrate_parallel(
     results: list[TaskResult] = []
     completed: dict[str, TaskResult] = {}
     effective_max_parallel = max_parallel or plan.max_parallel or 5
+    total_cost_accum = 0.0
 
     for layer_idx, layer in enumerate(layers):
+        # Plan 層級預算檢查（SPEC-005 AC-005-003）
+        if plan.max_total_budget_usd and total_cost_accum >= plan.max_total_budget_usd:
+            on_progress and on_progress(
+                f"⚠️ 總成本 ${total_cost_accum:.2f} 已達上限 ${plan.max_total_budget_usd}，停止執行"
+            )
+            for remaining_layer in layers[layer_idx:]:
+                for t in remaining_layer:
+                    results.append(TaskResult(
+                        task_id=t.id,
+                        status="skipped",
+                        error=f"Plan 總預算上限 ${plan.max_total_budget_usd} 已達到",
+                    ))
+            break
+
         merged_tasks = [merge_defaults(t, plan) for t in layer]
 
         # 批次並行
@@ -254,6 +284,7 @@ async def _orchestrate_parallel(
             results.extend(batch_results)
             for task, result in zip(batch, batch_results):
                 completed[task.id] = result
+                total_cost_accum += result.cost_usd or 0
 
         # Checkpoint
         if (

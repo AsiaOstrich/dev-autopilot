@@ -172,6 +172,8 @@ class TaskPlan(BaseModel):
     max_parallel: Optional[int] = None
     quality: Optional[QualityProfileName | QualityConfig] = None
     test_policy: Optional[TestPolicy] = None
+    max_total_budget_usd: Optional[float] = None
+    """整個 plan 的總預算上限（美元），超過即停止執行剩餘 tasks"""
 
 
 class ExecutionSummary(BaseModel):

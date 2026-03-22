@@ -90,6 +90,11 @@
     "test_policy": {
       "$ref": "#/definitions/test_policy",
       "description": "Test policy linking UDS test-governance standards"
+    },
+    "max_total_budget_usd": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Maximum total budget for the entire plan in USD. Execution stops when cumulative cost reaches this limit."
     }
   },
   "definitions": {

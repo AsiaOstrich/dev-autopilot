@@ -221,12 +221,29 @@ async function orchestrateSequential(
   const results: TaskResult[] = [];
   const completed = new Map<string, TaskResult>();
   const checkpointPolicy = options.checkpointPolicy ?? "never";
+  let totalCostAccum = 0;
 
   for (let i = 0; i < sortedTasks.length; i++) {
+    // Plan 層級預算檢查（SPEC-005 AC-005-003）
+    if (plan.max_total_budget_usd && totalCostAccum >= plan.max_total_budget_usd) {
+      options.onProgress?.(`⚠️ 總成本 $${totalCostAccum.toFixed(2)} 已達上限 $${plan.max_total_budget_usd}，停止執行`);
+      // 將剩餘 tasks 標記為 skipped
+      for (let j = i; j < sortedTasks.length; j++) {
+        results.push({
+          task_id: sortedTasks[j].id,
+          status: "skipped",
+          duration_ms: 0,
+          error: `Plan 總預算上限 $${plan.max_total_budget_usd} 已達到`,
+        });
+      }
+      break;
+    }
+
     const task = mergeDefaults(sortedTasks[i], plan);
     const result = await executeOneTask(task, adapter, options, completed, worktreeManager);
     results.push(result);
     completed.set(task.id, result);
+    totalCostAccum += result.cost_usd ?? 0;
 
     // 層間 Checkpoint（序列模式中每個 task 視為一層）
     if (checkpointPolicy === "after_each_layer" && options.onCheckpoint && i < sortedTasks.length - 1) {
@@ -264,12 +281,29 @@ async function orchestrateParallel(
   const results: TaskResult[] = [];
   const completed = new Map<string, TaskResult>();
   const maxParallel = options.maxParallel ?? plan.max_parallel ?? Infinity;
+  let totalCostAccum = 0;
 
   options.onProgress?.(`並行模式啟動，共 ${layers.length} 層，最大並行數 ${maxParallel === Infinity ? "無限制" : maxParallel}`);
 
   const checkpointPolicy = options.checkpointPolicy ?? "never";
 
   for (let layerIdx = 0; layerIdx < layers.length; layerIdx++) {
+    // Plan 層級預算檢查（SPEC-005 AC-005-003）
+    if (plan.max_total_budget_usd && totalCostAccum >= plan.max_total_budget_usd) {
+      options.onProgress?.(`⚠️ 總成本 $${totalCostAccum.toFixed(2)} 已達上限 $${plan.max_total_budget_usd}，停止執行`);
+      for (let j = layerIdx; j < layers.length; j++) {
+        for (const t of layers[j]) {
+          results.push({
+            task_id: t.id,
+            status: "skipped",
+            duration_ms: 0,
+            error: `Plan 總預算上限 $${plan.max_total_budget_usd} 已達到`,
+          });
+        }
+      }
+      break;
+    }
+
     const layer = layers[layerIdx];
     options.onProgress?.(`--- 第 ${layerIdx + 1}/${layers.length} 層：${layer.map(t => t.id).join(", ")} ---`);
 
@@ -290,6 +324,7 @@ async function orchestrateParallel(
     for (const result of layerResults) {
       results.push(result);
       completed.set(result.task_id, result);
+      totalCostAccum += result.cost_usd ?? 0;
     }
 
     // 層間 Checkpoint
