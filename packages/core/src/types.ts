@@ -532,6 +532,8 @@ export interface OrchestratorOptions {
   onCheckpoint?: CheckpointCallback;
   /** 隔離模式（借鑑 Superpowers Git Worktree 隔離執行） */
   isolation?: "none" | "worktree";
+  /** 專案原始 CLAUDE.md 路徑（用於 generated_prompt 生成） */
+  existingClaudeMdPath?: string;
 }
 
 /**

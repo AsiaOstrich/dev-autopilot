@@ -6,6 +6,7 @@
  */
 
 import { validatePlan } from "./plan-validator.js";
+import { resolvePlan } from "./plan-resolver.js";
 import { runFixLoop, type ExecuteResult } from "./fix-loop.js";
 import { runQualityGate, type ShellExecutor } from "./quality-gate.js";
 import { runDualStageJudge, shouldRunJudge } from "./judge.js";
@@ -19,6 +20,7 @@ import type {
   ExecutionSummary,
   OrchestratorOptions,
   QualityConfig,
+  ResolvedTask,
   SafetyHook,
   Task,
   TaskPlan,
@@ -181,24 +183,37 @@ export async function orchestrate(
     throw new Error(`Plan 驗證失敗：${validation.errors.join("; ")}`);
   }
 
+  // 2. 解析 plan：生成 generated_prompt（含角色、驗收條件、約束、專案指引）
+  const resolved = await resolvePlan(plan, {
+    existingClaudeMdPath: options.existingClaudeMdPath,
+  });
+
+  // 建立 resolved task 查詢表（供後續 executeOneTask 使用）
+  const resolvedTaskMap = new Map<string, ResolvedTask>();
+  for (const layer of resolved.layers) {
+    for (const task of layer.tasks) {
+      resolvedTaskMap.set(task.id, task);
+    }
+  }
+
   const startTime = Date.now();
 
-  // 2. Worktree 隔離模式（借鑑 Superpowers Git Worktree 隔離執行）
+  // 3. Worktree 隔離模式（借鑑 Superpowers Git Worktree 隔離執行）
   let worktreeManager: WorktreeManager | undefined;
   if (options.isolation === "worktree") {
     worktreeManager = new WorktreeManager(options.cwd);
     options.onProgress?.("啟用 Worktree 隔離模式");
   }
 
-  // 3. 選擇執行模式
+  // 4. 選擇執行模式
   try {
     if (options.parallel) {
-      const results = await orchestrateParallel(plan, adapter, options, worktreeManager);
+      const results = await orchestrateParallel(plan, adapter, options, worktreeManager, resolvedTaskMap);
       return buildReport(results, Date.now() - startTime, options.qualityConfig);
     }
 
     // 序列模式（原有邏輯）
-    const results = await orchestrateSequential(plan, adapter, options, worktreeManager);
+    const results = await orchestrateSequential(plan, adapter, options, worktreeManager, resolvedTaskMap);
     return buildReport(results, Date.now() - startTime, options.qualityConfig);
   } finally {
     // 清理所有 worktree
@@ -216,6 +231,7 @@ async function orchestrateSequential(
   adapter: AgentAdapter,
   options: OrchestratorOptions,
   worktreeManager?: WorktreeManager,
+  resolvedTaskMap?: Map<string, ResolvedTask>,
 ): Promise<TaskResult[]> {
   const sortedTasks = topologicalSort(plan.tasks);
   const results: TaskResult[] = [];
@@ -239,7 +255,8 @@ async function orchestrateSequential(
       break;
     }
 
-    const task = mergeDefaults(sortedTasks[i], plan);
+    // 優先使用 resolved task（含 generated_prompt），否則 fallback 到 mergeDefaults
+    const task = resolvedTaskMap?.get(sortedTasks[i].id) ?? mergeDefaults(sortedTasks[i], plan);
     const result = await executeOneTask(task, adapter, options, completed, worktreeManager);
     results.push(result);
     completed.set(task.id, result);
@@ -276,6 +293,7 @@ async function orchestrateParallel(
   adapter: AgentAdapter,
   options: OrchestratorOptions,
   worktreeManager?: WorktreeManager,
+  resolvedTaskMap?: Map<string, ResolvedTask>,
 ): Promise<TaskResult[]> {
   const layers = topologicalLayers(plan.tasks);
   const results: TaskResult[] = [];
@@ -307,8 +325,8 @@ async function orchestrateParallel(
     const layer = layers[layerIdx];
     options.onProgress?.(`--- 第 ${layerIdx + 1}/${layers.length} 層：${layer.map(t => t.id).join(", ")} ---`);
 
-    // 準備本層的 tasks（合併 defaults）
-    const mergedTasks = layer.map(t => mergeDefaults(t, plan));
+    // 優先使用 resolved task（含 generated_prompt），否則 fallback 到 mergeDefaults
+    const mergedTasks = layer.map(t => resolvedTaskMap?.get(t.id) ?? mergeDefaults(t, plan));
 
     // 分批執行（受 maxParallel 限制）
     const layerResults: TaskResult[] = [];

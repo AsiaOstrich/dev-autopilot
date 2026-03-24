@@ -105,8 +105,19 @@ export class ClaudeAdapter implements AgentAdapter {
 
   /**
    * 構建送給 Claude 的 prompt
+   *
+   * 優先使用 generated_prompt（由 plan-resolver 生成的完整行為規範），
+   * 包含角色定義、驗收條件、使用者意圖、約束條件和專案指引。
+   * 若無 generated_prompt 則 fallback 到最小化拼接。
    */
   private buildPrompt(task: Task): string {
+    // 優先使用 generated_prompt（ResolvedTask 透過 extends Task 傳入）
+    const generatedPrompt = (task as { generated_prompt?: string }).generated_prompt;
+    if (generatedPrompt) {
+      return generatedPrompt;
+    }
+
+    // Fallback：最小化 prompt
     let prompt = `請執行以下任務：\n\n## ${task.title}\n\n${task.spec}`;
 
     if (task.verify_command) {

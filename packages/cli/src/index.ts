@@ -5,8 +5,8 @@
  *   devap run --plan <file> [--agent claude|opencode|cli] [--parallel] [--max-parallel <n>] [--dry-run]
  */
 
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { readFile, access } from "node:fs/promises";
+import { resolve, join } from "node:path";
 import { Command } from "commander";
 import { registerInitCommand } from "./commands/init.js";
 import { registerSyncStandardsCommand } from "./commands/sync-standards.js";
@@ -92,16 +92,28 @@ program
         process.exit(1);
       }
 
+      // 偵測專案 CLAUDE.md（用於 generated_prompt 注入專案指引）
+      const cwd = process.cwd();
+      const claudeMdPath = join(cwd, "CLAUDE.md");
+      let existingClaudeMdPath: string | undefined;
+      try {
+        await access(claudeMdPath);
+        existingClaudeMdPath = claudeMdPath;
+      } catch {
+        // CLAUDE.md 不存在，不注入
+      }
+
       // 執行
       const mode = opts.parallel ? "並行" : "序列";
       console.log(`\n🚀 開始執行（${mode}模式）...\n`);
       const report = await orchestrate(plan, adapter, {
-        cwd: process.cwd(),
+        cwd,
         sessionId: plan.session_id,
         onProgress: (msg: string) => console.log(msg),
         safetyHooks: [createDefaultSafetyHook()],
         parallel: opts.parallel,
         maxParallel: opts.maxParallel,
+        existingClaudeMdPath,
       });
 
       // 輸出報告
