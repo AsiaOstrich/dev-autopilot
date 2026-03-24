@@ -1,5 +1,6 @@
 # Systematic Debugging Workflow - AI Optimized
-# Inspired by Superpowers systematic-debugging + UDS format
+# Source: core/systematic-debugging.md
+# Inspired by Superpowers systematic-debugging (MIT)
 
 standard:
   id: systematic-debugging
@@ -9,8 +10,9 @@ standard:
   meta:
     version: "1.0.0"
     updated: "2026-03-20"
-    source: superpowers/systematic-debugging
+    source: core/systematic-debugging.md
     description: 系統化除錯工作流標準
+    inspired_by: superpowers/systematic-debugging
 
   guidelines:
     - "遵循四階段鐵律：Root Cause → Pattern Analysis → Hypothesis Testing → Fix Implementation"
@@ -47,12 +49,25 @@ standard:
         - "確認不引入新問題"
 
   rules:
-    - trigger: "連續修復失敗 3 次"
+    - id: SD-001
+      trigger: "連續修復失敗 3 次"
       action: "停止猜測，質疑架構設計"
       priority: critical
-    - trigger: "出現 'quick fix'、'just try'、'should work now' 等字眼"
+    - id: SD-002
+      trigger: "出現 'quick fix'、'just try'、'should work now' 等字眼"
       action: "停止，回到 Phase 1 根因分析"
       priority: high
-    - trigger: "多元件交互錯誤"
+    - id: SD-003
+      trigger: "多元件交互錯誤"
       action: "在每個元件邊界加診斷觀測"
       priority: medium
+
+physical_spec:
+  type: checklist
+  validator:
+    type: ai_review
+    rule: "檢查除錯過程是否遵循四階段工作流：root_cause → pattern_analysis → hypothesis_testing → fix_implementation"
+  checks:
+    - "根因分析是否在修復嘗試之前完成"
+    - "是否記錄每次假設與驗證結果"
+    - "連續失敗 3 次是否觸發架構審查"

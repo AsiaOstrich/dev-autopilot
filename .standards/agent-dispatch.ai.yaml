@@ -1,5 +1,6 @@
 # Agent Dispatch & Parallel Coordination - AI Optimized
-# Inspired by Superpowers dispatching-parallel-agents + subagent-driven-development
+# Source: core/agent-dispatch.md
+# Inspired by Superpowers dispatching-parallel-agents + subagent-driven-development (MIT)
 
 standard:
   id: agent-dispatch
@@ -9,8 +10,9 @@ standard:
   meta:
     version: "1.0.0"
     updated: "2026-03-20"
-    source: superpowers/subagent-driven-development
+    source: core/agent-dispatch.md
     description: 子代理派遣、並行協調與狀態回報標準
+    inspired_by: superpowers/subagent-driven-development
 
   guidelines:
     - "派遣前必須識別獨立域（無共享狀態 → 可並行）"
@@ -42,9 +44,26 @@ standard:
       description: "明確定義期望的回報格式"
 
   rules:
-    - trigger: "多個代理編輯相同檔案"
+    - id: AD-001
+      trigger: "多個代理編輯相同檔案"
       action: "標記衝突，需要人工或自動合併"
       priority: critical
-    - trigger: "代理回報 BLOCKED"
+    - id: AD-002
+      trigger: "代理回報 BLOCKED"
       action: "嘗試升級模型等級再試一次"
       priority: high
+    - id: AD-003
+      trigger: "所有並行代理完成"
+      action: "跑完整測試套件驗證整合"
+      priority: high
+
+physical_spec:
+  type: checklist
+  validator:
+    type: ai_review
+    rule: "檢查代理派遣是否遵循獨立域識別、prompt 三原則、狀態協定"
+  checks:
+    - "並行代理是否在獨立域上工作（無共享檔案）"
+    - "代理 prompt 是否包含完整上下文"
+    - "代理是否回報標準化狀態碼"
+    - "並行完成後是否執行整合測試"

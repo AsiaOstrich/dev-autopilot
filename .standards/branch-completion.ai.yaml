@@ -1,5 +1,6 @@
 # Branch Completion Workflow - AI Optimized
-# Inspired by Superpowers finishing-a-development-branch
+# Source: core/branch-completion.md
+# Inspired by Superpowers finishing-a-development-branch (MIT)
 
 standard:
   id: branch-completion
@@ -9,8 +10,9 @@ standard:
   meta:
     version: "1.0.0"
     updated: "2026-03-20"
-    source: superpowers/finishing-a-development-branch
+    source: core/branch-completion.md
     description: 分支完成決策與清理標準
+    inspired_by: superpowers/finishing-a-development-branch
 
   guidelines:
     - "測試全過才能談完成"
@@ -51,9 +53,30 @@ standard:
         - "清理 worktree（若有）"
 
   rules:
-    - trigger: "使用者選擇 discard"
+    - id: BC-001
+      trigger: "使用者選擇 discard"
       action: "要求輸入分支名稱確認，防止誤刪"
       priority: critical
-    - trigger: "分支有 worktree"
+    - id: BC-002
+      trigger: "分支有 worktree"
       action: "完成後自動清理 worktree"
       priority: high
+    - id: BC-003
+      trigger: "前置條件未滿足"
+      action: "阻止完成，顯示失敗的檢查項目"
+      priority: high
+    - id: BC-004
+      trigger: "分支閒置超過 14 天"
+      action: "通知使用者完成或丟棄"
+      priority: medium
+
+physical_spec:
+  type: checklist
+  validator:
+    type: ai_review
+    rule: "檢查分支完成是否遵循前置條件檢查和四選項流程"
+  checks:
+    - "完成前是否通過所有前置條件（測試、lint、type check）"
+    - "是否提供完成選項供使用者選擇"
+    - "Discard 操作是否要求明確確認"
+    - "關聯的 worktree 是否被清理"

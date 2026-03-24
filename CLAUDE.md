@@ -256,12 +256,12 @@ Body MUST be bilingual: English first → blank line → Chinese second. NEVER m
 - `pipeline-integration-standards.ai.yaml` - pipeline-integration-standards.ai.yaml
 - `acceptance-criteria-traceability.ai.yaml` - acceptance-criteria-traceability.ai.yaml
 - `change-batching-standards.ai.yaml` - change-batching-standards.ai.yaml
-- `systematic-debugging.ai.yaml` - 系統化除錯工作流（借鑑 Superpowers）
-- `agent-dispatch.ai.yaml` - 子代理派遣與並行協調（借鑑 Superpowers）
-- `model-selection.ai.yaml` - AI 模型分級選擇策略（借鑑 Superpowers）
-- `git-worktree.ai.yaml` - Git Worktree 隔離開發（借鑑 Superpowers）
-- `branch-completion.ai.yaml` - 分支完成工作流（借鑑 Superpowers）
-- `verification-evidence.ai.yaml` - 驗證證據標準（借鑑 Superpowers）
+- `systematic-debugging.ai.yaml` - systematic-debugging.ai.yaml
+- `agent-dispatch.ai.yaml` - agent-dispatch.ai.yaml
+- `model-selection.ai.yaml` - model-selection.ai.yaml
+- `git-worktree.ai.yaml` - git-worktree.ai.yaml
+- `branch-completion.ai.yaml` - branch-completion.ai.yaml
+- `verification-evidence.ai.yaml` - verification-evidence.ai.yaml
 <!-- UDS:STANDARDS:END -->
 
 ---

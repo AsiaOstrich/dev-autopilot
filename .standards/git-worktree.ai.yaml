@@ -1,5 +1,6 @@
 # Git Worktree Isolation - AI Optimized
-# Inspired by Superpowers using-git-worktrees
+# Source: core/git-worktree.md
+# Inspired by Superpowers using-git-worktrees (MIT)
 
 standard:
   id: git-worktree
@@ -9,8 +10,9 @@ standard:
   meta:
     version: "1.0.0"
     updated: "2026-03-20"
-    source: superpowers/using-git-worktrees
+    source: core/git-worktree.md
     description: Git Worktree 隔離開發與生命週期管理標準
+    inspired_by: superpowers/using-git-worktrees
 
   guidelines:
     - "worktree 目錄必須在 .gitignore 中"
@@ -46,9 +48,30 @@ standard:
         - "prune 殘留 worktree（git worktree prune）"
 
   rules:
-    - trigger: "worktree 目錄不在 .gitignore 中"
+    - id: GW-001
+      trigger: "worktree 目錄不在 .gitignore 中"
       action: "自動加入 .gitignore"
       priority: critical
-    - trigger: "基準測試失敗"
+    - id: GW-002
+      trigger: "基準測試失敗"
       action: "中止任務，報告環境問題"
       priority: high
+    - id: GW-003
+      trigger: "異常退出"
+      action: "確保 cleanup 被執行"
+      priority: high
+    - id: GW-004
+      trigger: "合併/刪除後殘留 worktree"
+      action: "prune 殘留 worktree 引用"
+      priority: medium
+
+physical_spec:
+  type: checklist
+  validator:
+    type: ai_review
+    rule: "檢查 worktree 使用是否遵循完整生命週期：setup → baseline → execute → merge → cleanup"
+  checks:
+    - "worktree 目錄是否在 .gitignore 中"
+    - "是否執行基準測試確認環境乾淨"
+    - "完成後是否執行 cleanup"
+    - "異常退出時是否有 cleanup 機制"

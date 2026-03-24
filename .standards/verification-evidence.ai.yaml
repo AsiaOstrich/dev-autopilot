@@ -1,5 +1,6 @@
 # Verification Evidence Standard - AI Optimized
-# Inspired by Superpowers verification-before-completion
+# Source: core/verification-evidence.md
+# Inspired by Superpowers verification-before-completion (MIT)
 
 standard:
   id: verification-evidence
@@ -9,8 +10,9 @@ standard:
   meta:
     version: "1.0.0"
     updated: "2026-03-20"
-    source: superpowers/verification-before-completion
+    source: core/verification-evidence.md
     description: 驗證證據標準 — Iron Law: 無驗證證據不可聲稱完成
+    inspired_by: superpowers/verification-before-completion
 
   guidelines:
     - "Iron Law：無驗證證據 = 不可聲稱完成"
@@ -53,9 +55,30 @@ standard:
     - "多個驗證步驟 → 所有步驟都必須通過"
 
   rules:
-    - trigger: "代理回報 success 但無 verification_evidence"
+    - id: VE-001
+      trigger: "代理回報 success 但無 verification_evidence"
       action: "降級為 done_with_concerns"
       priority: critical
-    - trigger: "exit_code ≠ 0"
+    - id: VE-002
+      trigger: "exit_code ≠ 0"
       action: "標記驗證失敗，啟動 fix loop"
       priority: high
+    - id: VE-003
+      trigger: "Bug fix 無 RED-GREEN 循環"
+      action: "要求提供 RED 和 GREEN 兩階段證據"
+      priority: high
+    - id: VE-004
+      trigger: "驗證輸出超過 2000 字元"
+      action: "截斷但保留錯誤訊息與摘要行"
+      priority: medium
+
+physical_spec:
+  type: checklist
+  validator:
+    type: ai_review
+    rule: "檢查任務完成是否附帶驗證證據（command + exit_code + output + timestamp）"
+  checks:
+    - "完成聲明是否附帶 verification_evidence"
+    - "evidence 是否包含所有必填欄位"
+    - "exit_code 是否為 0（成功）"
+    - "Bug fix 是否有 RED → GREEN 循環證據"
