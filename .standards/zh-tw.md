@@ -344,7 +344,7 @@ public class UserService
 
 ---
 
-## Commit Message Language | Commit 訊息語言
+## Output Language | 產出語言
 
 ### Commit Types in Traditional Chinese | 繁體中文 Commit 類型
 
@@ -417,7 +417,7 @@ Fixes #456
 - 新增 DatabaseConnectionPool 類別
 - 集中管理所有資料庫連線
 - 提供連線狀態監控介面
-- ��新所有 Repository 使用新的連線池
+- 更新所有 Repository 使用新的連線池
 
 影響範圍:
 - 所有 Repository 類別已更新
