@@ -9,6 +9,9 @@
  * 透過回呼函式執行 shell 指令，方便測試 mock。
  */
 
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { createHash } from "node:crypto";
 import type { QualityConfig, Task, CompletionCheck, VerificationEvidence } from "./types.js";
 
 /**
@@ -31,7 +34,7 @@ export interface QualityGateResult {
 export interface QualityGateStep {
   /** 步驟名稱 */
   name: "verify" | "lint" | "type_check" | "static_analysis" | "completion_check"
-       | "unit" | "integration" | "system" | "e2e";
+       | "unit" | "integration" | "system" | "e2e" | "agents_md_check";
   /** 執行的指令 */
   command: string;
   /** 是否通過 */
@@ -168,6 +171,21 @@ export async function runQualityGate(
     }
   }
 
+  // AGENTS.md 合規檢查（非阻塞，僅 warning）
+  const agentsMdResult = await checkAgentsMdSync(options.cwd);
+  if (agentsMdResult) {
+    steps.push(agentsMdResult.step);
+    evidence.push({
+      command: "agents_md_check",
+      exit_code: agentsMdResult.step.passed ? 0 : 1,
+      output: agentsMdResult.step.output.slice(0, 2000),
+      timestamp: new Date().toISOString(),
+    });
+    if (!agentsMdResult.step.passed) {
+      options.onProgress?.(`[${task.id}] Quality Gate: AGENTS.md drift detected (warning only)`);
+    }
+  }
+
   return { passed: true, steps, evidence };
 }
 
@@ -201,6 +219,102 @@ async function executeStep(
 /**
  * 構建失敗結果，含 feedback 供 fix loop 使用
  */
+/**
+ * 檢查 AGENTS.md 與 .standards/ 的同步狀態
+ *
+ * 非阻塞：drift 只產生 warning，不阻擋 QualityGate。
+ * 檢查項目：
+ * 1. AGENTS.md 是否存在
+ * 2. UDS 標記區塊是否存在
+ * 3. 標記區塊中列出的標準是否與 .standards/ 目錄一致
+ *
+ * @param cwd - 專案根目錄
+ * @returns QualityGateStep 或 null（若無 AGENTS.md）
+ */
+export async function checkAgentsMdSync(
+  cwd: string,
+): Promise<{ step: QualityGateStep; driftedFiles?: string[] } | null> {
+  const agentsMdPath = join(cwd, "AGENTS.md");
+  const standardsDir = join(cwd, ".standards");
+
+  let agentsMdContent: string;
+  try {
+    agentsMdContent = await readFile(agentsMdPath, "utf-8");
+  } catch {
+    return null; // No AGENTS.md — skip check
+  }
+
+  // Extract UDS marker block
+  const startMarker = "<!-- UDS:STANDARDS:START -->";
+  const endMarker = "<!-- UDS:STANDARDS:END -->";
+  const startIdx = agentsMdContent.indexOf(startMarker);
+  const endIdx = agentsMdContent.indexOf(endMarker);
+
+  if (startIdx === -1 || endIdx === -1) {
+    return {
+      step: {
+        name: "agents_md_check",
+        command: "agents_md_check",
+        passed: true,
+        output: "AGENTS.md 存在但無 UDS 標記區塊，跳過檢查。",
+      },
+    };
+  }
+
+  // Parse listed standards from marker block
+  const block = agentsMdContent.slice(startIdx + startMarker.length, endIdx);
+  const listedFiles = new Set<string>();
+  for (const match of block.matchAll(/`([^`]+\.ai\.yaml)`/g)) {
+    listedFiles.add(match[1]);
+  }
+
+  // Read actual .standards/ directory
+  let actualFiles: Set<string>;
+  try {
+    const entries = await readdir(standardsDir);
+    actualFiles = new Set(entries.filter(f => f.endsWith(".ai.yaml")));
+  } catch {
+    return {
+      step: {
+        name: "agents_md_check",
+        command: "agents_md_check",
+        passed: false,
+        output: ".standards/ 目錄不存在，但 AGENTS.md 有 UDS 標記區塊。請執行 uds init。",
+      },
+    };
+  }
+
+  // Compare
+  const missing = [...actualFiles].filter(f => !listedFiles.has(f));
+  const extra = [...listedFiles].filter(f => !actualFiles.has(f));
+  const drifted = [...missing, ...extra];
+
+  if (drifted.length === 0) {
+    return {
+      step: {
+        name: "agents_md_check",
+        command: "agents_md_check",
+        passed: true,
+        output: `AGENTS.md 與 .standards/ 同步（${actualFiles.size} 項標準）。`,
+      },
+    };
+  }
+
+  const details: string[] = [];
+  if (missing.length > 0) details.push(`新增但未列入 AGENTS.md：${missing.join(", ")}`);
+  if (extra.length > 0) details.push(`AGENTS.md 列出但已移除：${extra.join(", ")}`);
+
+  return {
+    step: {
+      name: "agents_md_check",
+      command: "agents_md_check",
+      passed: false,
+      output: `AGENTS.md drift detected:\n${details.join("\n")}\n建議執行 uds update 更新。`,
+    },
+    driftedFiles: drifted,
+  };
+}
+
 function buildFailResult(
   steps: QualityGateStep[],
   failedStep: QualityGateStep,

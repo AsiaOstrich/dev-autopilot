@@ -1,5 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
-import { runQualityGate, type ShellExecutor } from "./quality-gate.js";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { runQualityGate, checkAgentsMdSync, type ShellExecutor } from "./quality-gate.js";
 import type { QualityConfig, Task } from "./types.js";
 
 const baseTask: Task = {
@@ -479,5 +482,81 @@ describe("runQualityGate — 驗證證據（Superpowers Iron Law）", () => {
     expect(result.passed).toBe(true);
     expect(result.evidence).toHaveLength(1);
     expect(result.evidence[0].output.length).toBeLessThanOrEqual(2000);
+  });
+});
+
+describe("checkAgentsMdSync — AGENTS.md 合規檢查", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "devap-qg-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("無 AGENTS.md 時回傳 null", async () => {
+    const result = await checkAgentsMdSync(tmpDir);
+    expect(result).toBeNull();
+  });
+
+  it("AGENTS.md 無 UDS 標記時 passed=true 並跳過", async () => {
+    await writeFile(join(tmpDir, "AGENTS.md"), "# My Project\nSome content");
+    const result = await checkAgentsMdSync(tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.step.passed).toBe(true);
+    expect(result!.step.output).toContain("無 UDS 標記區塊");
+  });
+
+  it("AGENTS.md 與 .standards/ 同步時 passed=true", async () => {
+    const stdDir = join(tmpDir, ".standards");
+    await mkdir(stdDir);
+    await writeFile(join(stdDir, "commit-message.ai.yaml"), "standard: {}");
+    await writeFile(join(stdDir, "testing.ai.yaml"), "standard: {}");
+    await writeFile(join(stdDir, "manifest.json"), "{}");
+    await writeFile(join(tmpDir, "AGENTS.md"), [
+      "# AGENTS",
+      "<!-- UDS:STANDARDS:START -->",
+      "- `commit-message.ai.yaml` - 提交訊息",
+      "- `testing.ai.yaml` - 測試標準",
+      "<!-- UDS:STANDARDS:END -->",
+    ].join("\n"));
+
+    const result = await checkAgentsMdSync(tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.step.passed).toBe(true);
+    expect(result!.step.output).toContain("同步");
+  });
+
+  it("新增標準未列入 AGENTS.md 時偵測 drift", async () => {
+    const stdDir = join(tmpDir, ".standards");
+    await mkdir(stdDir);
+    await writeFile(join(stdDir, "commit-message.ai.yaml"), "standard: {}");
+    await writeFile(join(stdDir, "testing.ai.yaml"), "standard: {}");
+    await writeFile(join(tmpDir, "AGENTS.md"), [
+      "<!-- UDS:STANDARDS:START -->",
+      "- `commit-message.ai.yaml`",
+      "<!-- UDS:STANDARDS:END -->",
+    ].join("\n"));
+
+    const result = await checkAgentsMdSync(tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.step.passed).toBe(false);
+    expect(result!.step.output).toContain("testing.ai.yaml");
+    expect(result!.driftedFiles).toContain("testing.ai.yaml");
+  });
+
+  it(".standards/ 不存在時 passed=false", async () => {
+    await writeFile(join(tmpDir, "AGENTS.md"), [
+      "<!-- UDS:STANDARDS:START -->",
+      "- `testing.ai.yaml`",
+      "<!-- UDS:STANDARDS:END -->",
+    ].join("\n"));
+
+    const result = await checkAgentsMdSync(tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.step.passed).toBe(false);
+    expect(result!.step.output).toContain("不存在");
   });
 });
