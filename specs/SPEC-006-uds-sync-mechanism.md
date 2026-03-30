@@ -1,4 +1,11 @@
-# SPEC-005: UDS 同步機制 — DevAP 標準版本管理
+# SPEC-006: UDS 同步機制 — DevAP 標準版本管理
+
+**狀態**: Implemented
+**建立日期**: 2026-03-21
+**作者**: devap team
+**前置**: 無
+
+---
 
 ## Context
 

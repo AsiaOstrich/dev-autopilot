@@ -1,5 +1,12 @@
 # SPEC-004: VibeOps Adapter — DevAP ↔ VibeOps 整合規格
 
+**狀態**: Implemented
+**建立日期**: 2026-03-21
+**作者**: devap team
+**前置**: 無
+
+---
+
 ## Context
 
 VibeOps 是 AsiaOstrich 的全生命週期軟體工廠（AGPL-3.0），擁有 7+1 Agent Pipeline。DevAP 作為 agent-agnostic 編排引擎，需要定義如何透過 `AgentAdapter` interface 整合 VibeOps。

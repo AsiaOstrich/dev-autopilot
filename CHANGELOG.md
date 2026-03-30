@@ -54,13 +54,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Python 測試案例從 161 增至 210（+49 個）
 
 #### 其他
-- `devap sync-standards` CLI 指令 — 自動從 UDS upstream 同步最新標準（SPEC-005）
+- `devap sync-standards` CLI 指令 — 自動從 UDS upstream 同步最新標準（SPEC-006）
   - `--check` 模式：僅檢查版本是否落後（適合 CI，落後時 exit 1）
   - `--force` 模式：強制覆蓋本地修改
   - GitHub API 版本查詢（releases → tags fallback）
   - Skills 版本對齊檢查
 - GitHub Actions `check-standards.yml` — 每週排程 + manifest 變更時自動檢查 UDS 版本
-- SPEC-005: UDS 同步機制 — 記錄短期 copy-once 改善與中期 npm 包化規劃
+- SPEC-006: UDS 同步機制 — 記錄短期 copy-once 改善與中期 npm 包化規劃
 - SPEC-004: VibeOps Adapter 整合規格
 - 跨產品整合策略文件：README.md 生態定位、CLAUDE.md 整合指引
 - SPEC-003 新增 Part D: VibeOps 消費者視角
