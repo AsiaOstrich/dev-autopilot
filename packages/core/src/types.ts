@@ -251,6 +251,65 @@ export interface QualityMetrics {
  *
  * 編排器執行完所有任務後產出的報告。
  */
+/**
+ * 標準效果回饋（UDS SPEC-SELFDIAG-001）
+ *
+ * 記錄每次執行中 UDS 標準的引用與遵循情況，
+ * 回饋給 UDS 用於分析標準有效性。
+ */
+export interface StandardEffectiveness {
+  /** 標準 ID（如 'testing', 'commit-message'） */
+  standard_id: string;
+  /** 標準版本 */
+  version?: string;
+  /** 應用此標準的 agent */
+  applied_by_agent?: string;
+  /** 效果評估 */
+  effectiveness: {
+    /** 是否在執行中被引用/載入 */
+    was_referenced: boolean;
+    /** 輸出是否符合標準 */
+    was_followed: boolean;
+    /** 違規次數 */
+    violation_count?: number;
+    /** 是否回報摩擦 */
+    friction_reported?: boolean;
+    /** 摩擦詳情 */
+    friction_detail?: string;
+  };
+}
+
+/**
+ * 標準效果報告（UDS SPEC-SELFDIAG-001 schema v1.0.0）
+ */
+export interface StandardsEffectivenessReport {
+  /** Schema 版本 */
+  schema_version: "1.0.0";
+  /** 來源 */
+  source: "devap" | "vibeops" | "manual";
+  /** 時間戳 */
+  timestamp: string;
+  /** 專案類型 */
+  project_type?: "web-api" | "cli" | "library" | "web-app" | "mobile" | "other";
+  /** 應用的標準列表 */
+  standards_applied: StandardEffectiveness[];
+  /** 迭代資料 */
+  iteration_data?: {
+    total_iterations: number;
+    iteration_causes?: Array<{
+      iteration: number;
+      cause: string;
+      related_standard?: string;
+    }>;
+  };
+  /** 未被標準涵蓋的問題 */
+  unmatched_issues?: Array<{
+    issue: string;
+    category: string;
+    suggested_standard?: string;
+  }>;
+}
+
 export interface ExecutionReport {
   /** 摘要統計 */
   summary: ExecutionSummary;
@@ -258,6 +317,8 @@ export interface ExecutionReport {
   tasks: TaskResult[];
   /** 品質指標（若使用品質模式） */
   quality_metrics?: QualityMetrics;
+  /** 標準效果回饋（UDS SPEC-SELFDIAG-001） */
+  standards_effectiveness?: StandardsEffectivenessReport;
 }
 
 /**

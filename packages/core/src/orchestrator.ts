@@ -26,6 +26,8 @@ import type {
   TaskPlan,
   TaskResult,
   TaskStatus,
+  StandardEffectiveness,
+  StandardsEffectivenessReport,
 } from "./types.js";
 
 /**
@@ -722,7 +724,76 @@ function buildReport(
     report.quality_metrics = buildQualityMetrics(results);
   }
 
+  // 標準效果回饋（UDS SPEC-SELFDIAG-001）
+  report.standards_effectiveness = buildStandardsEffectiveness(results);
+
   return report;
+}
+
+/**
+ * 從 TaskResult 的驗證證據中推導 UDS 標準效果回饋
+ */
+function buildStandardsEffectiveness(results: TaskResult[]): StandardsEffectivenessReport {
+  const standardsMap = new Map<string, StandardEffectiveness>();
+
+  for (const result of results) {
+    if (!result.verification_evidence) continue;
+
+    for (const ev of result.verification_evidence) {
+      // 從驗證命令推導相關標準
+      const standardId = inferStandardFromCommand(ev.command);
+      if (!standardId) continue;
+
+      const existing = standardsMap.get(standardId);
+      if (existing) {
+        existing.effectiveness.was_followed = existing.effectiveness.was_followed && ev.exit_code === 0;
+        existing.effectiveness.violation_count = (existing.effectiveness.violation_count ?? 0) + (ev.exit_code === 0 ? 0 : 1);
+      } else {
+        standardsMap.set(standardId, {
+          standard_id: standardId,
+          effectiveness: {
+            was_referenced: true,
+            was_followed: ev.exit_code === 0,
+            violation_count: ev.exit_code === 0 ? 0 : 1,
+          },
+        });
+      }
+    }
+  }
+
+  // 迭代資料：從 retry_count > 0 的 tasks 推導
+  const iterationCauses = results
+    .filter(r => (r.retry_count ?? 0) > 0)
+    .map((r, i) => ({
+      iteration: i + 1,
+      cause: r.error ?? "quality gate failure",
+      related_standard: r.verification_evidence?.[0]
+        ? inferStandardFromCommand(r.verification_evidence[0].command)
+        : undefined,
+    }))
+    .filter((c): c is { iteration: number; cause: string; related_standard: string } => !!c.related_standard);
+
+  return {
+    schema_version: "1.0.0",
+    source: "devap",
+    timestamp: new Date().toISOString(),
+    standards_applied: [...standardsMap.values()],
+    iteration_data: {
+      total_iterations: results.reduce((sum, r) => sum + (r.retry_count ?? 0), 0),
+      iteration_causes: iterationCauses.length > 0 ? iterationCauses : undefined,
+    },
+  };
+}
+
+/** 從驗證命令推導相關 UDS 標準 ID */
+function inferStandardFromCommand(command: string): string | undefined {
+  const cmd = command.toLowerCase();
+  if (cmd.includes("test") || cmd.includes("vitest") || cmd.includes("jest")) return "testing";
+  if (cmd.includes("lint") || cmd.includes("eslint")) return "checkin-standards";
+  if (cmd.includes("type") || cmd.includes("tsc")) return "checkin-standards";
+  if (cmd.includes("semgrep") || cmd.includes("security")) return "security-standards";
+  if (cmd.includes("agents_md")) return "ai-instruction-standards";
+  return undefined;
 }
 
 /**
