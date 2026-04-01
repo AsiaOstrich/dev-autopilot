@@ -8,9 +8,24 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Worktree Hooks 配置（輕量介面）
+ *
+ * 與 adapter-claude 的 HooksConfig 結構相容，
+ * 但定義在 core 以避免跨套件依賴。
+ */
+export interface WorktreeHooksConfig {
+  hooks?: {
+    [eventName: string]: Array<{
+      matcher: string;
+      hooks: Array<{ type: string; command: string; timeout?: number; statusMessage?: string }>;
+    }>;
+  };
+}
 
 /** Worktree 資訊 */
 export interface WorktreeInfo {
@@ -102,6 +117,43 @@ export class WorktreeManager {
       } catch {
         // .gitignore 不存在或無法讀取，跳過
       }
+    }
+  }
+
+  /**
+   * 為 worktree 設定 task-specific 環境
+   *
+   * 在 create() 之後、adapter.executeTask() 之前呼叫。
+   * 寫入 task-specific CLAUDE.md 和 hooks 配置到 worktree 目錄。
+   *
+   * @param taskId - Task ID
+   * @param claudeMdContent - 生成的 CLAUDE.md 內容
+   * @param hooksConfig - hooks 配置（可選）
+   */
+  async setupTaskEnvironment(
+    taskId: string,
+    claudeMdContent: string,
+    hooksConfig?: WorktreeHooksConfig,
+  ): Promise<void> {
+    const info = this.worktrees.get(taskId);
+    if (!info) {
+      throw new Error(`找不到 Task ${taskId} 的 worktree 記錄`);
+    }
+
+    // 寫入 task-specific CLAUDE.md
+    const claudeMdPath = join(info.path, "CLAUDE.md");
+    await writeFile(claudeMdPath, claudeMdContent, "utf-8");
+
+    // 寫入 hooks 配置（若有）
+    if (hooksConfig?.hooks && Object.keys(hooksConfig.hooks).length > 0) {
+      const claudeDir = join(info.path, ".claude");
+      await mkdir(claudeDir, { recursive: true });
+      const settingsPath = join(claudeDir, "settings.json");
+      await writeFile(
+        settingsPath,
+        JSON.stringify({ hooks: hooksConfig.hooks }, null, 2),
+        "utf-8",
+      );
     }
   }
 
