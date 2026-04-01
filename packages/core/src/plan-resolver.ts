@@ -85,6 +85,7 @@ export async function resolvePlan(
     project: plan.project,
     existingClaudeMdPath: options.existingClaudeMdPath,
     extraConstraints: options.extraConstraints,
+    qualityConfig: qualityConfig,
   };
 
   const resolvedLayers: ResolvedLayer[] = [];
