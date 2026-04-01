@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+#### Harness Engineering — Phase 1 & 2（#4, #5, #6）
+- CLAUDE.md 注入增強 — 品質要求與 Harness 提示 sections 自動注入 sub-agent prompt（#4）
+  - `ClaudeMdOptions` 新增 `qualityConfig` 欄位
+  - strict 品質模式注入 lint/type-check/judge/retry 等品質檢查細節
+  - 所有 task 始終注入 Harness 提示（Quality Gate 驗證提醒）
+- PostToolUse Hook 配置生成器 — 根據 QualityConfig 動態產生 Claude Code hooks（#5）
+  - `generateHarnessHooks()` 將 lint/type-check 指令轉為 PostToolUse hooks
+  - `writeHarnessConfig()` 寫入 worktree 的 `.claude/settings.json`
+  - hooks 僅在 Write/Edit/NotebookEdit 工具觸發，quality: "none" 時不注入
+- Worktree 環境配置增強 — 並行 task 各自攜帶獨立 Harness 環境（#6）
+  - `WorktreeManager.setupTaskEnvironment()` 寫入 task-specific CLAUDE.md + hooks
+  - `WorktreeHooksConfig` 輕量介面避免 core ↔ adapter 跨套件依賴
+- BDD 場景與 ATDD 追蹤矩陣（3 個 `.feature` + 3 個 ATDD 表）
+
+#### Standards & Compliance
+- ExecutionReport 新增 `standards_effectiveness` 回饋欄位（UDS SPEC-SELFDIAG-001）（#2）
+- QualityGate 新增 AGENTS.md 合規檢查 — 偵測 `.standards/` 與 AGENTS.md 的 drift（#1）
+- Envelope Adapter 實作 UDS Agent Communication Protocol
+- Anthropic ToS 合規保護機制（SPEC-005）— API key 偵測、首次告知、預算上限
+- CLI 模式 adapter 整合完整行為規範 prompt（generated_prompt）
+
+#### Documentation & Tools
+- 新增面向開發工程師的完整使用說明（`docs/usage-guide.md`）
+- 新增 observability-assistant、runbook-assistant、slo-assistant 技能
+
+### Changed
+- UDS 標準同步至 5.1.0-beta.3
+- Agent Communication Protocol 標準重新命名（agent-communication → agent-communication-protocol）
+- SPEC-005 修正編號衝突並補齊 status metadata
+
 ## [0.2.0] - 2026-03-21
 
 ### Added
