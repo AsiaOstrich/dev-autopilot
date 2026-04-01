@@ -633,7 +633,7 @@ public async Task AuthenticateAsync_WithInvalidPassword_ReturnsNull()
 // ✅ CORRECT: English punctuation in comments
 // This method validates user credentials, checks permissions, and generates JWT token.
 
-// ❌ WRONG: Chinese punctuation in English comments
+// ��� WRONG: Chinese punctuation in English comments
 // This method validates user credentials,checks permissions,and generates JWT token。
 ```
 

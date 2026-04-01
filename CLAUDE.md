@@ -210,7 +210,7 @@ Body MUST be bilingual: English first → blank line → Chinese second. NEVER m
 
 本專案採用 UDS 標準。所有規範位於 `.standards/`：
 
-### Core (56 standards)
+### Core (57 standards)
 - `deployment-standards.ai.yaml` - deployment-standards.ai.yaml
 - `documentation-writing-standards.ai.yaml` - documentation-writing-standards.ai.yaml
 - `ai-agreement-standards.ai.yaml` - ai-agreement-standards.ai.yaml
@@ -267,6 +267,7 @@ Body MUST be bilingual: English first → blank line → Chinese second. NEVER m
 - `ai-response-navigation.ai.yaml` - ai-response-navigation.ai.yaml
 - `adr-standards.ai.yaml` - adr-standards.ai.yaml
 - `retrospective-standards.ai.yaml` - retrospective-standards.ai.yaml
+- `agent-communication-protocol.ai.yaml` - agent-communication-protocol.ai.yaml
 <!-- UDS:STANDARDS:END -->
 
 ---
