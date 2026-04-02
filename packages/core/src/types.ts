@@ -150,6 +150,8 @@ export interface TaskPlan {
   test_policy?: TestPolicy;
   /** 整個 plan 的總預算上限（美元），超過即停止執行剩餘 tasks */
   max_total_budget_usd?: number;
+  /** 執行歷史配置（opt-in，SPEC-008） */
+  execution_history?: import("./execution-history/types.js").ExecutionHistoryConfig;
 }
 
 /**

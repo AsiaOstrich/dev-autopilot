@@ -5,12 +5,17 @@
  * 支援並行模式：同層 tasks 使用 Promise.all() 並行執行。
  */
 
+import { join } from "node:path";
 import { validatePlan } from "./plan-validator.js";
 import { resolvePlan } from "./plan-resolver.js";
 import { runFixLoop, type ExecuteResult } from "./fix-loop.js";
 import { runQualityGate, type ShellExecutor } from "./quality-gate.js";
 import { runDualStageJudge, shouldRunJudge } from "./judge.js";
 import { WorktreeManager } from "./worktree-manager.js";
+import { HistoryWriter } from "./execution-history/writer.js";
+import { LocalStorageBackend } from "./execution-history/storage-backend.js";
+import { DiffCapture } from "./execution-history/diff-capture.js";
+import { LogCollector } from "./execution-history/log-collector.js";
 import type {
   AgentAdapter,
   CheckpointAction,
@@ -200,23 +205,38 @@ export async function orchestrate(
 
   const startTime = Date.now();
 
-  // 3. Worktree 隔離模式（借鑑 Superpowers Git Worktree 隔離執行）
+  // 3. 初始化 HistoryWriter（SPEC-008，opt-in）
+  const historyEnabled = plan.execution_history?.enabled === true;
+  const historyWriter = historyEnabled
+    ? new HistoryWriter(
+        new LocalStorageBackend(join(options.cwd, ".execution-history")),
+        plan.execution_history!,
+      )
+    : null;
+
+  // 4. Wrap onProgress 收集執行日誌（若啟用歷史）
+  const logCollector = historyWriter ? new LogCollector(options.onProgress) : null;
+  const wrappedOptions = logCollector
+    ? { ...options, onProgress: logCollector.handler }
+    : options;
+
+  // 5. Worktree 隔離模式（借鑑 Superpowers Git Worktree 隔離執行）
   let worktreeManager: WorktreeManager | undefined;
-  if (options.isolation === "worktree") {
-    worktreeManager = new WorktreeManager(options.cwd);
-    options.onProgress?.("啟用 Worktree 隔離模式");
+  if (wrappedOptions.isolation === "worktree") {
+    worktreeManager = new WorktreeManager(wrappedOptions.cwd);
+    wrappedOptions.onProgress?.("啟用 Worktree 隔離模式");
   }
 
-  // 4. 選擇執行模式
+  // 6. 選擇執行模式
   try {
-    if (options.parallel) {
-      const results = await orchestrateParallel(plan, adapter, options, worktreeManager, resolvedTaskMap);
-      return buildReport(results, Date.now() - startTime, options.qualityConfig);
+    if (wrappedOptions.parallel) {
+      const results = await orchestrateParallel(plan, adapter, wrappedOptions, worktreeManager, resolvedTaskMap, historyWriter, logCollector);
+      return buildReport(results, Date.now() - startTime, wrappedOptions.qualityConfig);
     }
 
     // 序列模式（原有邏輯）
-    const results = await orchestrateSequential(plan, adapter, options, worktreeManager, resolvedTaskMap);
-    return buildReport(results, Date.now() - startTime, options.qualityConfig);
+    const results = await orchestrateSequential(plan, adapter, wrappedOptions, worktreeManager, resolvedTaskMap, historyWriter, logCollector);
+    return buildReport(results, Date.now() - startTime, wrappedOptions.qualityConfig);
   } finally {
     // 清理所有 worktree
     if (worktreeManager) {
@@ -234,6 +254,8 @@ async function orchestrateSequential(
   options: OrchestratorOptions,
   worktreeManager?: WorktreeManager,
   resolvedTaskMap?: Map<string, ResolvedTask>,
+  historyWriter?: HistoryWriter | null,
+  logCollector?: LogCollector | null,
 ): Promise<TaskResult[]> {
   const sortedTasks = topologicalSort(plan.tasks);
   const results: TaskResult[] = [];
@@ -259,10 +281,26 @@ async function orchestrateSequential(
 
     // 優先使用 resolved task（含 generated_prompt），否則 fallback 到 mergeDefaults
     const task = resolvedTaskMap?.get(sortedTasks[i].id) ?? mergeDefaults(sortedTasks[i], plan);
+
+    // DiffCapture（SPEC-008）：task 執行前記錄起始點
+    const diffCapture = historyWriter ? new DiffCapture(options.cwd) : null;
+    if (diffCapture) await diffCapture.start();
+
     const result = await executeOneTask(task, adapter, options, completed, worktreeManager);
     results.push(result);
     completed.set(task.id, result);
     totalCostAccum += result.cost_usd ?? 0;
+
+    // 記錄執行歷史（SPEC-008）
+    if (historyWriter && result.status !== "skipped") {
+      const codeDiff = diffCapture ? await diffCapture.end() : "";
+      await historyWriter.recordRun(task, result, {
+        codeDiff,
+        executionLog: logCollector?.getEntries(),
+      }).catch((err: unknown) => {
+        options.onProgress?.(`[${task.id}] 執行歷史記錄失敗：${err instanceof Error ? err.message : err}`);
+      });
+    }
 
     // 層間 Checkpoint（序列模式中每個 task 視為一層）
     if (checkpointPolicy === "after_each_layer" && options.onCheckpoint && i < sortedTasks.length - 1) {
@@ -296,6 +334,8 @@ async function orchestrateParallel(
   options: OrchestratorOptions,
   worktreeManager?: WorktreeManager,
   resolvedTaskMap?: Map<string, ResolvedTask>,
+  historyWriter?: HistoryWriter | null,
+  logCollector?: LogCollector | null,
 ): Promise<TaskResult[]> {
   const layers = topologicalLayers(plan.tasks);
   const results: TaskResult[] = [];
@@ -340,11 +380,23 @@ async function orchestrateParallel(
       layerResults.push(...batchResults);
     }
 
-    // 記錄本層結果
+    // 記錄本層結果 + 執行歷史（SPEC-008）
     for (const result of layerResults) {
       results.push(result);
       completed.set(result.task_id, result);
       totalCostAccum += result.cost_usd ?? 0;
+
+      if (historyWriter && result.status !== "skipped") {
+        const task = mergedTasks.find(t => t.id === result.task_id);
+        if (task) {
+          await historyWriter.recordRun(task, result, {
+            codeDiff: "", // 並行模式下 diff capture 較複雜，Phase 2 先用空字串
+            executionLog: logCollector?.getEntries(),
+          }).catch((err: unknown) => {
+            options.onProgress?.(`[${result.task_id}] 執行歷史記錄失敗：${err instanceof Error ? err.message : err}`);
+          });
+        }
+      }
     }
 
     // 層間 Checkpoint
