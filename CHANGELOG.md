@@ -29,6 +29,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `generatePreToolUseScript()` 生成可獨立執行的 shell 腳本（jq + pure-bash fallback）
   - 安全攔截始終啟用（即使 quality: "none"），`generateHarnessHooks()` 向後相容
 
+#### Execution History Repository（SPEC-008 Phase 1 & 2）
+- 執行歷史持久化 — 每次 task 執行自動產出結構化 artifacts，供後續 agent 從歷史學習
+  - `HistoryWriter`：6+1 artifact 生成（task-description、code-diff、test-results、execution-log、token-usage、final-status、error-analysis）
+  - `SensitiveDataRedactor`：5 類內建 pattern + 自訂 pattern，所有內容寫入前自動 redact
+  - `LocalStorageBackend`：檔案 I/O + 路徑穿越防護
+  - L2 manifest + L1 index 自動更新，run number 三位數零填充遞增
+- Orchestrator 整合 — `TaskPlan.execution_history.enabled` opt-in 啟用
+  - `DiffCapture`：捕獲 task 前後 git diff（含新增檔案），非 git repo 安靜回傳空
+  - `LogCollector`：包裝 onProgress 收集結構化日誌，同時轉發原始 callback
+  - 未啟用時行為完全不變（向後相容）
+
 #### Standards & Compliance
 - ExecutionReport 新增 `standards_effectiveness` 回饋欄位（UDS SPEC-SELFDIAG-001）（#2）
 - QualityGate 新增 AGENTS.md 合規檢查 — 偵測 `.standards/` 與 AGENTS.md 的 drift（#1）
