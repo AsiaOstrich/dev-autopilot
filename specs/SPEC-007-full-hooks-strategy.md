@@ -1,6 +1,6 @@
 # SPEC-007 Feature: Full Hooks Strategy Engine
 
-- **Status**: Draft
+- **Status**: Implemented
 - **Author**: AsiaOstrich
 - **Created**: 2026-04-01
 - **Depends on**: SPEC-001 (Quality Gate), Issue #5 (PostToolUse Hook)
