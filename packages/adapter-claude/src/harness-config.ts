@@ -10,6 +10,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { QualityConfig } from "@devap/core";
+import { generatePreToolUseScript } from "./safety-script-generator.js";
 
 /**
  * 單一 hook 動作定義
@@ -96,6 +97,104 @@ export function generateHarnessHooks(qualityConfig: QualityConfig): HooksConfig 
       ],
     },
   };
+}
+
+/**
+ * 完整 hooks 策略配置（SPEC-007）
+ *
+ * 涵蓋 PreToolUse（安全攔截）、PostToolUse（品質檢查）、Stop（品質門檻 gate）。
+ */
+export interface FullHooksConfig {
+  hooks: {
+    PreToolUse?: MatcherGroup[];
+    PostToolUse?: MatcherGroup[];
+    Stop?: MatcherGroup[];
+  };
+}
+
+/**
+ * generateFullHooksStrategy 選項
+ */
+export interface FullHooksStrategyOptions {
+  /** 驗證指令（用於 Stop hook） */
+  verifyCommand?: string;
+}
+
+/**
+ * 生成完整 hooks 策略（SPEC-007）
+ *
+ * - PreToolUse：安全攔截（始終啟用，即使 quality: "none"）
+ * - PostToolUse：品質檢查（有 lint/type-check 時啟用）
+ * - Stop：品質門檻（有 verifyCommand 時啟用）
+ *
+ * @param qualityConfig - 品質設定
+ * @param options - 額外選項（verifyCommand 等）
+ * @returns 完整 hooks 配置
+ */
+export function generateFullHooksStrategy(
+  qualityConfig: QualityConfig,
+  options?: FullHooksStrategyOptions,
+): FullHooksConfig {
+  const result: FullHooksConfig = { hooks: {} };
+
+  // PreToolUse：安全攔截（始終啟用）
+  const safetyScript = generatePreToolUseScript();
+  result.hooks.PreToolUse = [
+    {
+      matcher: "Bash",
+      hooks: [
+        {
+          type: "command",
+          command: safetyScript,
+          timeout: 10,
+          statusMessage: "DevAP Safety: 檢查危險操作...",
+        },
+      ],
+    },
+  ];
+
+  // PostToolUse：品質檢查（有 lint/type-check 時啟用）
+  const postToolUse = generateHarnessHooks(qualityConfig);
+  if (postToolUse.hooks?.PostToolUse) {
+    result.hooks.PostToolUse = postToolUse.hooks.PostToolUse;
+  }
+
+  // Stop：品質門檻（有 verifyCommand 時啟用）
+  if (options?.verifyCommand) {
+    const verifyCmd = options.verifyCommand;
+    // 生成 Stop hook 腳本：執行 verify_command，失敗時輸出 decision:block
+    const stopScript = [
+      "#!/bin/bash",
+      "# DevAP Quality Gate — Stop hook",
+      `RESULT=$(${verifyCmd} 2>&1)`,
+      "EXIT_CODE=$?",
+      "if [ $EXIT_CODE -ne 0 ]; then",
+      '  echo \'{"decision":"block","reason":"verify_command 失敗，請修復後再結束"}\'',
+      "  exit 0",
+      "fi",
+      "exit 0",
+    ].join("\n");
+
+    result.hooks.Stop = [
+      {
+        matcher: ".*",
+        hooks: [
+          {
+            type: "command",
+            command: stopScript,
+            timeout: 120,
+            statusMessage: "DevAP Quality Gate: 執行驗證...",
+          },
+        ],
+      },
+    ];
+  }
+
+  // 清除空的 hook 類別
+  if (!result.hooks.PostToolUse) delete result.hooks.PostToolUse;
+  if (!result.hooks.Stop) delete result.hooks.Stop;
+
+  return result;
 }
 
 /**
