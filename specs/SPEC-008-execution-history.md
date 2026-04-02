@@ -1,6 +1,6 @@
 # SPEC-008 執行歷史倉庫（Execution History Repository）
 
-**狀態**: Draft
+**狀態**: Implemented (Phase 1-3)
 **建立日期**: 2026-04-02
 **作者**: devap team
 **上游規格**: dev-platform XSPEC-003-SDD（Approved）
