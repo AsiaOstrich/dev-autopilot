@@ -14,3 +14,5 @@ export { HistoryWriter } from "./writer.js";
 export { LocalStorageBackend } from "./storage-backend.js";
 export { DiffCapture } from "./diff-capture.js";
 export { LogCollector } from "./log-collector.js";
+export { HistoryReader } from "./reader.js";
+export { RetentionManager } from "./retention.js";
