@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-#### Harness Engineering — Phase 1 & 2（#4, #5, #6）
+#### Harness Engineering — Phase 1, 2 & 3（#4, #5, #6, SPEC-007）
 - CLAUDE.md 注入增強 — 品質要求與 Harness 提示 sections 自動注入 sub-agent prompt（#4）
   - `ClaudeMdOptions` 新增 `qualityConfig` 欄位
   - strict 品質模式注入 lint/type-check/judge/retry 等品質檢查細節
@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `WorktreeManager.setupTaskEnvironment()` 寫入 task-specific CLAUDE.md + hooks
   - `WorktreeHooksConfig` 輕量介面避免 core ↔ adapter 跨套件依賴
 - BDD 場景與 ATDD 追蹤矩陣（3 個 `.feature` + 3 個 ATDD 表）
+- Full Hooks Strategy Engine（SPEC-007）— 將 hook 系統從 PostToolUse-only 擴展為完整三事件策略
+  - PreToolUse hook：執行期即時攔截危險指令（rm -rf、DROP DATABASE 等），exit code 2 block
+  - Stop hook：agent 結束前自動執行 verify_command，失敗則 decision:block 要求繼續修復
+  - `generateFullHooksStrategy()` 統一生成三種 hook 配置
+  - `generatePreToolUseScript()` 生成可獨立執行的 shell 腳本（jq + pure-bash fallback）
+  - 安全攔截始終啟用（即使 quality: "none"），`generateHarnessHooks()` 向後相容
 
 #### Standards & Compliance
 - ExecutionReport 新增 `standards_effectiveness` 回饋欄位（UDS SPEC-SELFDIAG-001）（#2）
