@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://uds.asiaostrich.com/schemas/execution-history-index.schema.json",
+  "title": "Execution History Index (L1)",
+  "description": "UDS 執行歷史全域索引，供 agent 快速篩選相關歷史",
+  "type": "object",
+  "required": ["version", "updated", "max_active_tasks", "archive_threshold_days", "tasks"],
+  "properties": {
+    "version": { "type": "string" },
+    "updated": { "type": "string", "format": "date-time" },
+    "max_active_tasks": { "type": "integer", "minimum": 1 },
+    "archive_threshold_days": { "type": "integer", "minimum": 1 },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["task_id", "task_name", "tags", "latest_run", "latest_status", "latest_date", "total_runs"],
+        "properties": {
+          "task_id": { "type": "string" },
+          "task_name": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "latest_run": { "type": "string", "pattern": "^\\d{3}$" },
+          "latest_status": { "type": "string", "enum": ["success", "failure", "partial"] },
+          "latest_date": { "type": "string" },
+          "total_runs": { "type": "integer", "minimum": 1 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

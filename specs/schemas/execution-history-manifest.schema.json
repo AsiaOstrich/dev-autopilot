@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://uds.asiaostrich.com/schemas/execution-history-manifest.schema.json",
+  "title": "Execution History Task Manifest (L2)",
+  "description": "UDS 執行歷史任務清單，含 run_history 和 key_metrics",
+  "type": "object",
+  "required": ["task_id", "task_description_summary", "run_history", "key_metrics", "artifacts_available"],
+  "properties": {
+    "task_id": { "type": "string" },
+    "task_description_summary": { "type": "string" },
+    "run_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["run", "status", "date", "duration_s", "tokens_total"],
+        "properties": {
+          "run": { "type": "string", "pattern": "^\\d{3}$" },
+          "status": { "type": "string", "enum": ["success", "failure", "partial"] },
+          "date": { "type": "string" },
+          "duration_s": { "type": "number", "minimum": 0 },
+          "tokens_total": { "type": "number", "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "key_metrics": {
+      "type": "object",
+      "required": ["pass_rate", "avg_tokens", "avg_duration_s"],
+      "properties": {
+        "pass_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "avg_tokens": { "type": "number", "minimum": 0 },
+        "avg_duration_s": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "artifacts_available": { "type": "array", "items": { "type": "string" } },
+    "failure_summary": { "type": "string" }
+  },
+  "additionalProperties": false
+}

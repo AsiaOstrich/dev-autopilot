@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://uds.asiaostrich.com/schemas/execution-history-log-entry.schema.json",
+  "title": "Execution History Log Entry (L3)",
+  "description": "UDS 執行歷史日誌條目（execution-log.jsonl 的每一行）",
+  "type": "object",
+  "required": ["timestamp", "message"],
+  "properties": {
+    "timestamp": { "type": "string" },
+    "message": { "type": "string" }
+  },
+  "additionalProperties": false
+}

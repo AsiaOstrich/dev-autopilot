@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://uds.asiaostrich.com/schemas/execution-history-final-status.schema.json",
+  "title": "Execution History Final Status (L3)",
+  "description": "UDS 執行歷史最終狀態 artifact",
+  "type": "object",
+  "required": ["status", "error", "duration_ms"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["success", "failed", "skipped", "timeout", "done_with_concerns", "needs_context", "blocked"]
+    },
+    "error": { "type": ["string", "null"] },
+    "duration_ms": { "type": "number", "minimum": 0 }
+  },
+  "additionalProperties": false
+}

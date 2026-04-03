@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://uds.asiaostrich.com/schemas/execution-history-test-results.schema.json",
+  "title": "Execution History Test Results (L3)",
+  "description": "UDS 執行歷史測試結果 artifact",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["command", "exit_code", "output", "timestamp"],
+    "properties": {
+      "command": { "type": "string" },
+      "exit_code": { "type": "integer" },
+      "output": { "type": "string" },
+      "timestamp": { "type": "string" }
+    },
+    "additionalProperties": false
+  }
+}

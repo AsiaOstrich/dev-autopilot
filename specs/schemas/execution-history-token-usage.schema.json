@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://uds.asiaostrich.com/schemas/execution-history-token-usage.schema.json",
+  "title": "Execution History Token Usage (L3)",
+  "description": "UDS 執行歷史 token 用量 artifact",
+  "type": "object",
+  "required": ["total", "breakdown"],
+  "properties": {
+    "total": {
+      "type": "object",
+      "required": ["cost_usd"],
+      "properties": {
+        "cost_usd": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "breakdown": {
+      "type": "array",
+      "items": { "type": "object" }
+    }
+  },
+  "additionalProperties": false
+}

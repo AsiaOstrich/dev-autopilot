@@ -17,6 +17,7 @@
     "ajv": "^8.18.0"
   },
   "devDependencies": {
+    "ajv-formats": "^3.0.1",
     "typescript": "^5.6.0",
     "vitest": "^2.0.0"
   },
