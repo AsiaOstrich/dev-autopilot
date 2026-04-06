@@ -202,6 +202,8 @@ export interface ExecuteOptions {
   onProgress?: (message: string) => void;
   /** 模型等級建議（adapter 可據此選擇不同 model endpoint） */
   modelTier?: ModelTier;
+  /** 品質設定（由 Orchestrator 傳入，adapter 用於生成 hooks） */
+  qualityConfig?: QualityConfig;
 }
 
 /**

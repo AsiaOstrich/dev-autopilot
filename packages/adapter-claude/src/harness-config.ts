@@ -7,7 +7,7 @@
  * 輸出符合 Claude Code settings.json hooks schema。
  */
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { QualityConfig } from "@devap/core";
 import { generatePreToolUseScript } from "./safety-script-generator.js";
@@ -67,7 +67,7 @@ export function generateHarnessHooks(qualityConfig: QualityConfig): HooksConfig 
   if (qualityConfig.lint_command) {
     hookActions.push({
       type: "command",
-      command: qualityConfig.lint_command,
+      command: wrapWithDebounce(qualityConfig.lint_command),
       timeout: 30,
       statusMessage: "Harness: lint 檢查中...",
     });
@@ -76,7 +76,7 @@ export function generateHarnessHooks(qualityConfig: QualityConfig): HooksConfig 
   if (qualityConfig.type_check_command) {
     hookActions.push({
       type: "command",
-      command: qualityConfig.type_check_command,
+      command: wrapWithDebounce(qualityConfig.type_check_command),
       timeout: 60,
       statusMessage: "Harness: 型別檢查中...",
     });
@@ -97,6 +97,47 @@ export function generateHarnessHooks(qualityConfig: QualityConfig): HooksConfig 
       ],
     },
   };
+}
+
+/**
+ * 將品質檢查指令包裝為含 debounce 的 shell 腳本
+ *
+ * 同一檔案在 DEBOUNCE_SEC 秒內只觸發一次，
+ * 使用檔案路徑 hash 作為 stamp 檔名以區分不同檔案。
+ *
+ * @param command - 原始品質檢查指令
+ * @returns 包裝後的 shell 腳本字串
+ */
+function wrapWithDebounce(command: string): string {
+  return [
+    "#!/bin/bash",
+    "# DevAP PostToolUse Hook — with debounce",
+    'DEBOUNCE_DIR="/tmp/devap-hooks-debounce"',
+    "DEBOUNCE_SEC=5",
+    'mkdir -p "$DEBOUNCE_DIR"',
+    "",
+    "# 從 stdin 讀取 hook input 取得檔案路徑",
+    "INPUT=$(cat)",
+    `FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')`,
+    'if [ -z "$FILE_PATH" ]; then exit 0; fi',
+    "",
+    "# Debounce：檢查同一檔案是否在冷卻期內",
+    'HASH=$(echo "$FILE_PATH" | md5sum 2>/dev/null | cut -d" " -f1 || echo "$FILE_PATH" | shasum | cut -d" " -f1)',
+    'STAMP_FILE="$DEBOUNCE_DIR/$HASH"',
+    "NOW=$(date +%s)",
+    "",
+    'if [ -f "$STAMP_FILE" ]; then',
+    '  LAST=$(cat "$STAMP_FILE")',
+    "  DIFF=$((NOW - LAST))",
+    '  if [ "$DIFF" -lt $DEBOUNCE_SEC ]; then',
+    "    exit 0  # Debounced — skip",
+    "  fi",
+    "fi",
+    'echo "$NOW" > "$STAMP_FILE"',
+    "",
+    "# 執行品質檢查",
+    `${command} 2>&1`,
+  ].join("\n");
 }
 
 /**
@@ -207,12 +248,12 @@ export function generateFullHooksStrategy(
  * @param targetDir - 目標目錄（通常是 worktree 路徑）
  */
 export async function writeHarnessConfig(
-  config: HooksConfig,
+  config: HooksConfig | FullHooksConfig,
   targetDir: string,
 ): Promise<void> {
-  // 無 hooks 時不建立設定檔
-  const hasHooks = config.hooks?.PostToolUse && config.hooks.PostToolUse.length > 0;
-  if (!hasHooks) {
+  // 取得 hooks 物件
+  const hooks = config.hooks;
+  if (!hooks || Object.keys(hooks).length === 0) {
     return;
   }
 
@@ -220,6 +261,23 @@ export async function writeHarnessConfig(
   await mkdir(claudeDir, { recursive: true });
 
   const settingsPath = join(claudeDir, "settings.json");
-  const settings = { hooks: config.hooks };
+  const settings = { hooks };
   await writeFile(settingsPath, JSON.stringify(settings, null, 2), "utf-8");
+}
+
+/**
+ * 清理 task-specific 的 hooks 配置
+ *
+ * 刪除 {targetDir}/.claude/settings.json。
+ * 冪等操作：檔案不存在時不拋錯。
+ *
+ * @param targetDir - 目標目錄（通常是 worktree 路徑）
+ */
+export async function cleanupHarnessConfig(targetDir: string): Promise<void> {
+  const settingsPath = join(targetDir, ".claude", "settings.json");
+  try {
+    await unlink(settingsPath);
+  } catch {
+    // 檔案不存在或已清理，忽略
+  }
 }

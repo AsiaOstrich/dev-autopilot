@@ -19,6 +19,11 @@ import type {
   Task,
   TaskResult,
 } from "@devap/core";
+import {
+  generateFullHooksStrategy,
+  writeHarnessConfig,
+  cleanupHarnessConfig,
+} from "./harness-config.js";
 
 /**
  * Claude Agent SDK Adapter
@@ -40,6 +45,9 @@ export class ClaudeAdapter implements AgentAdapter {
    */
   async executeTask(task: Task, options: ExecuteOptions): Promise<TaskResult> {
     const startTime = Date.now();
+
+    // Phase 1: 注入 hooks 配置（SPEC-009）
+    const hooksWritten = await this.injectHarnessHooks(task, options);
 
     const prompt = this.buildPrompt(task);
     const sdkOptions = this.buildOptions(task, options);
@@ -72,7 +80,29 @@ export class ClaudeAdapter implements AgentAdapter {
         duration_ms: Date.now() - startTime,
         error: error instanceof Error ? error.message : String(error),
       };
+    } finally {
+      // Phase 3: 清理 hooks 配置（SPEC-009）
+      if (hooksWritten) {
+        await cleanupHarnessConfig(options.cwd);
+      }
     }
+  }
+
+  /**
+   * 注入 Harness hooks 配置到 worktree（SPEC-009）
+   *
+   * 根據 qualityConfig 生成完整 hooks 策略並寫入 {cwd}/.claude/settings.json。
+   * 無 qualityConfig 時不注入（向後相容）。
+   */
+  private async injectHarnessHooks(task: Task, options: ExecuteOptions): Promise<boolean> {
+    if (!options.qualityConfig) return false;
+
+    const config = generateFullHooksStrategy(options.qualityConfig, {
+      verifyCommand: options.qualityConfig.verify ? task.verify_command : undefined,
+    });
+
+    await writeHarnessConfig(config, options.cwd);
+    return true;
   }
 
   /**

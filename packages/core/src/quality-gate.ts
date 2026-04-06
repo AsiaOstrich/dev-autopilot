@@ -56,6 +56,19 @@ export type ShellExecutor = (
 ) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
 
 /**
+ * Hook telemetry 記錄
+ *
+ * 由 adapter 在 agent 執行期間收集，
+ * 記錄 PostToolUse hooks 已成功執行的品質檢查步驟。
+ */
+export interface HookTelemetry {
+  /** lint hook 最後一次執行結果（true = 全部通過） */
+  lint_passed?: boolean;
+  /** type_check hook 最後一次執行結果（true = 全部通過） */
+  type_check_passed?: boolean;
+}
+
+/**
  * Quality Gate 選項
  */
 export interface QualityGateOptions {
@@ -65,6 +78,8 @@ export interface QualityGateOptions {
   shellExecutor: ShellExecutor;
   /** 進度回呼 */
   onProgress?: (message: string) => void;
+  /** Hook telemetry（若有，跳過已通過的步驟） */
+  hookTelemetry?: HookTelemetry;
 }
 
 /**
@@ -132,21 +147,53 @@ export async function runQualityGate(
     }
   }
 
-  // lint_command（兩種模式都執行）
+  // lint_command（兩種模式都執行，telemetry pass 時跳過）
   if (qualityConfig.lint_command) {
-    options.onProgress?.(`[${task.id}] Quality Gate: lint → ${qualityConfig.lint_command}`);
-    const step = await runStep("lint", qualityConfig.lint_command);
-    if (!step.passed) {
-      return buildFailResult(steps, step, evidence);
+    if (options.hookTelemetry?.lint_passed === true) {
+      options.onProgress?.(`[${task.id}] Quality Gate: lint → skipped (hook telemetry pass)`);
+      steps.push({
+        name: "lint",
+        command: qualityConfig.lint_command,
+        passed: true,
+        output: "Skipped: hook telemetry indicates pass",
+      });
+      evidence.push({
+        command: qualityConfig.lint_command,
+        exit_code: 0,
+        output: "Skipped: hook telemetry indicates pass",
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      options.onProgress?.(`[${task.id}] Quality Gate: lint → ${qualityConfig.lint_command}`);
+      const step = await runStep("lint", qualityConfig.lint_command);
+      if (!step.passed) {
+        return buildFailResult(steps, step, evidence);
+      }
     }
   }
 
-  // type_check_command（兩種模式都執行）
+  // type_check_command（兩種模式都執行，telemetry pass 時跳過）
   if (qualityConfig.type_check_command) {
-    options.onProgress?.(`[${task.id}] Quality Gate: type_check → ${qualityConfig.type_check_command}`);
-    const step = await runStep("type_check", qualityConfig.type_check_command);
-    if (!step.passed) {
-      return buildFailResult(steps, step, evidence);
+    if (options.hookTelemetry?.type_check_passed === true) {
+      options.onProgress?.(`[${task.id}] Quality Gate: type_check → skipped (hook telemetry pass)`);
+      steps.push({
+        name: "type_check",
+        command: qualityConfig.type_check_command,
+        passed: true,
+        output: "Skipped: hook telemetry indicates pass",
+      });
+      evidence.push({
+        command: qualityConfig.type_check_command,
+        exit_code: 0,
+        output: "Skipped: hook telemetry indicates pass",
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      options.onProgress?.(`[${task.id}] Quality Gate: type_check → ${qualityConfig.type_check_command}`);
+      const step = await runStep("type_check", qualityConfig.type_check_command);
+      if (!step.passed) {
+        return buildFailResult(steps, step, evidence);
+      }
     }
   }
 
