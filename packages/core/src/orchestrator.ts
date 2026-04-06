@@ -16,6 +16,7 @@ import { HistoryWriter } from "./execution-history/writer.js";
 import { LocalStorageBackend } from "./execution-history/storage-backend.js";
 import { DiffCapture } from "./execution-history/diff-capture.js";
 import { LogCollector } from "./execution-history/log-collector.js";
+import { parseTelemetryJsonl } from "./telemetry-parser.js";
 import type {
   AgentAdapter,
   CheckpointAction,
@@ -231,12 +232,12 @@ export async function orchestrate(
   try {
     if (wrappedOptions.parallel) {
       const results = await orchestrateParallel(plan, adapter, wrappedOptions, worktreeManager, resolvedTaskMap, historyWriter, logCollector);
-      return buildReport(results, Date.now() - startTime, wrappedOptions.qualityConfig);
+      return buildReport(results, Date.now() - startTime, wrappedOptions.qualityConfig, wrappedOptions.cwd);
     }
 
     // 序列模式（原有邏輯）
     const results = await orchestrateSequential(plan, adapter, wrappedOptions, worktreeManager, resolvedTaskMap, historyWriter, logCollector);
-    return buildReport(results, Date.now() - startTime, wrappedOptions.qualityConfig);
+    return buildReport(results, Date.now() - startTime, wrappedOptions.qualityConfig, wrappedOptions.cwd);
   } finally {
     // 清理所有 worktree
     if (worktreeManager) {
@@ -765,6 +766,7 @@ function buildReport(
   results: TaskResult[],
   totalDuration: number,
   qualityConfig?: QualityConfig,
+  cwd?: string,
 ): ExecutionReport {
   const summary = buildSummary(results, totalDuration);
   const report: ExecutionReport = { summary, tasks: results };
@@ -777,7 +779,17 @@ function buildReport(
   }
 
   // 標準效果回饋（UDS SPEC-SELFDIAG-001）
-  report.standards_effectiveness = buildStandardsEffectiveness(results);
+  const effectiveness = buildStandardsEffectiveness(results);
+
+  // Harness hook telemetry 整合（SPEC-010）
+  if (cwd) {
+    const hookData = parseTelemetryJsonl(cwd);
+    if (hookData) {
+      effectiveness.harness_hook_data = hookData;
+    }
+  }
+
+  report.standards_effectiveness = effectiveness;
 
   return report;
 }

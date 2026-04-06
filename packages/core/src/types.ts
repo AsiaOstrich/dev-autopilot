@@ -284,6 +284,44 @@ export interface StandardEffectiveness {
 }
 
 /**
+ * 單一 standard 的 harness hook 統計（SPEC-010）
+ */
+export interface HarnessHookStandardStats {
+  /** 標準 ID（如 'testing', 'commit-message'） */
+  standard_id: string;
+  /** 該標準的 hook 執行次數 */
+  executions: number;
+  /** 通過次數 */
+  pass_count: number;
+  /** 失敗次數 */
+  fail_count: number;
+  /** 通過率（0-1） */
+  pass_rate: number;
+  /** 平均執行時間（毫秒） */
+  avg_duration_ms: number;
+}
+
+/**
+ * Harness hook telemetry 彙總資料（SPEC-010）
+ *
+ * 從 .standards/telemetry.jsonl 解析並彙整。
+ */
+export interface HarnessHookData {
+  /** hook 總執行次數 */
+  total_executions: number;
+  /** 通過次數 */
+  pass_count: number;
+  /** 失敗次數 */
+  fail_count: number;
+  /** 通過率（0-1） */
+  pass_rate: number;
+  /** 平均執行時間（毫秒） */
+  avg_duration_ms: number;
+  /** 按 standard_id 分群的統計 */
+  by_standard: HarnessHookStandardStats[];
+}
+
+/**
  * 標準效果報告（UDS SPEC-SELFDIAG-001 schema v1.0.0）
  */
 export interface StandardsEffectivenessReport {
@@ -312,6 +350,8 @@ export interface StandardsEffectivenessReport {
     category: string;
     suggested_standard?: string;
   }>;
+  /** Harness hook telemetry 彙總（SPEC-010，telemetry.jsonl 不存在時為 undefined） */
+  harness_hook_data?: HarnessHookData;
 }
 
 export interface ExecutionReport {

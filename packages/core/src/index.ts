@@ -9,3 +9,4 @@ export { runQualityGate, type QualityGateResult, type QualityGateStep, type Qual
 export { resolvePlan, type PlanResolverOptions } from "./plan-resolver.js";
 export { resolveQualityProfile, checkQualityWarnings } from "./quality-profile.js";
 export { runFixLoop, buildStructuredFeedback, type ExecuteResult, type FixLoopCallbacks } from "./fix-loop.js";
+export { parseTelemetryJsonl } from "./telemetry-parser.js";
