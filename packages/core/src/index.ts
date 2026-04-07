@@ -10,3 +10,5 @@ export { resolvePlan, type PlanResolverOptions } from "./plan-resolver.js";
 export { resolveQualityProfile, checkQualityWarnings } from "./quality-profile.js";
 export { runFixLoop, buildStructuredFeedback, type ExecuteResult, type FixLoopCallbacks } from "./fix-loop.js";
 export { parseTelemetryJsonl } from "./telemetry-parser.js";
+export { TokenCostAnalyzer, ProposalGenerator, ApprovalManager, serializeProposal, parseProposal } from "./evolution/index.js";
+export type { EvolutionConfig, AnalyzerConfig, AnalysisResult, GroupKey, GroupStats, Outlier, Proposal, ProposalMeta, ProposalStatus, ProposalImpact, ProposalTarget, AnalysisLogEntry, ConfirmApplyFn, ApprovalResult } from "./evolution/index.js";
