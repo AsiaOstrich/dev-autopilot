@@ -106,6 +106,10 @@ export interface Task {
   test_levels?: TestLevel[];
   /** 建議模型等級（借鑑 Superpowers 模型分級策略） */
   model_tier?: ModelTier;
+  /** 規格品質評分（由 UDS checklist scoring 提供，optional） */
+  spec_score?: number;
+  /** 規格品質滿分（Standard mode = 10, Boost mode = 25） */
+  spec_max_score?: number;
 }
 
 /**

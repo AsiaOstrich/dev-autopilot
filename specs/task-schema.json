@@ -83,6 +83,14 @@
             "type": "array",
             "items": { "$ref": "#/definitions/test_level" },
             "description": "Multi-level test definitions (takes precedence over verify_command)"
+          },
+          "spec_score": {
+            "type": "number",
+            "description": "Spec quality score from UDS checklist scoring"
+          },
+          "spec_max_score": {
+            "type": "number",
+            "description": "Maximum possible spec quality score (10 for standard, 25 for boost)"
           }
         }
       }

@@ -26,6 +26,10 @@ export interface QualityGateResult {
   feedback?: string;
   /** 驗證證據（借鑑 Superpowers Iron Law：Evidence before claims） */
   evidence: VerificationEvidence[];
+  /** 規格品質評分（由 UDS checklist scoring 提供） */
+  score?: number;
+  /** 規格品質滿分（Standard mode = 10, Boost mode = 25） */
+  max_score?: number;
 }
 
 /**
@@ -135,7 +139,7 @@ export async function runQualityGate(
       options.onProgress?.(`[${task.id}] Quality Gate: ${level.name} → ${level.command}`);
       const step = await runStep(level.name, level.command);
       if (!step.passed) {
-        return buildFailResult(steps, step, evidence);
+        return buildFailResult(steps, step, evidence, task);
       }
     }
   } else if (qualityConfig.verify && task.verify_command) {
@@ -143,7 +147,7 @@ export async function runQualityGate(
     options.onProgress?.(`[${task.id}] Quality Gate: verify_command → ${task.verify_command}`);
     const step = await runStep("verify", task.verify_command);
     if (!step.passed) {
-      return buildFailResult(steps, step, evidence);
+      return buildFailResult(steps, step, evidence, task);
     }
   }
 
@@ -167,7 +171,7 @@ export async function runQualityGate(
       options.onProgress?.(`[${task.id}] Quality Gate: lint → ${qualityConfig.lint_command}`);
       const step = await runStep("lint", qualityConfig.lint_command);
       if (!step.passed) {
-        return buildFailResult(steps, step, evidence);
+        return buildFailResult(steps, step, evidence, task);
       }
     }
   }
@@ -192,7 +196,7 @@ export async function runQualityGate(
       options.onProgress?.(`[${task.id}] Quality Gate: type_check → ${qualityConfig.type_check_command}`);
       const step = await runStep("type_check", qualityConfig.type_check_command);
       if (!step.passed) {
-        return buildFailResult(steps, step, evidence);
+        return buildFailResult(steps, step, evidence, task);
       }
     }
   }
@@ -202,7 +206,7 @@ export async function runQualityGate(
     options.onProgress?.(`[${task.id}] Quality Gate: static_analysis → ${qualityConfig.static_analysis_command}`);
     const step = await runStep("static_analysis", qualityConfig.static_analysis_command);
     if (!step.passed) {
-      return buildFailResult(steps, step, evidence);
+      return buildFailResult(steps, step, evidence, task);
     }
   }
 
@@ -213,7 +217,7 @@ export async function runQualityGate(
       options.onProgress?.(`[${task.id}] Quality Gate: completion_check(${criterion.name}) → ${criterion.command}`);
       const step = await runStep("completion_check", criterion.command);
       if (!step.passed && criterion.required) {
-        return buildFailResult(steps, step, evidence);
+        return buildFailResult(steps, step, evidence, task);
       }
     }
   }
@@ -233,7 +237,15 @@ export async function runQualityGate(
     }
   }
 
-  return { passed: true, steps, evidence };
+  return {
+    passed: true,
+    steps,
+    evidence,
+    ...(task.spec_score != null && {
+      score: task.spec_score,
+      max_score: task.spec_max_score ?? (task.spec_score <= 10 ? 10 : 25),
+    }),
+  };
 }
 
 /**
@@ -366,6 +378,7 @@ function buildFailResult(
   steps: QualityGateStep[],
   failedStep: QualityGateStep,
   evidence: VerificationEvidence[],
+  task?: Task,
 ): QualityGateResult {
   const feedback = [
     `品質門檻「${failedStep.name}」失敗。`,
@@ -376,5 +389,14 @@ function buildFailResult(
     "請修正上述問題後重試。",
   ].join("\n");
 
-  return { passed: false, steps, feedback, evidence };
+  return {
+    passed: false,
+    steps,
+    feedback,
+    evidence,
+    ...(task?.spec_score != null && {
+      score: task.spec_score,
+      max_score: task.spec_max_score ?? (task.spec_score <= 10 ? 10 : 25),
+    }),
+  };
 }
