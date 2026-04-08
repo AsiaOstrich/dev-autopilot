@@ -761,3 +761,335 @@ describe("orchestrate（Checkpoint）", () => {
     expect(report.summary.total_tasks).toBe(1);
   });
 });
+
+// ============================================================
+// DEC-011: Stigmergic Coordination — ActivationPredicate 評估
+// [Source] specs/DEC-011-stigmergic-coordination.md
+// ============================================================
+
+describe("DEC-011: ActivationPredicate 評估", () => {
+  describe("[AC-011-007] threshold 類型評估", () => {
+    it("[Source] 條件不滿足時 task 被 skip", async () => {
+      const adapter = createMockAdapter({
+        executeTask: vi.fn(async (task: Task): Promise<TaskResult> => ({
+          task_id: task.id,
+          status: "success",
+          cost_usd: 0.1,
+          // T-001 回傳 metrics，fail_rate = 0.1（不超過 0.3）
+          metrics: { fail_rate: 0.1 },
+        })),
+      });
+
+      const plan: TaskPlan = {
+        project: "test",
+        tasks: [
+          { id: "T-001", title: "Run tests", spec: "run all tests" },
+          {
+            id: "T-002",
+            title: "Refactor",
+            spec: "refactor if fail rate high",
+            depends_on: ["T-001"],
+            activationPredicate: {
+              type: "threshold",
+              metric: "fail_rate",
+              operator: ">",
+              value: 0.3,
+              description: "失敗率超過 30% 才觸發重構",
+            },
+          },
+        ],
+      };
+
+      const report = await orchestrate(plan, adapter, defaultOptions);
+
+      expect(report.tasks[1].status).toBe("skipped");
+      expect(report.tasks[1].error).toContain("activation predicate not met");
+      expect(report.tasks[1].error).toContain("失敗率超過 30% 才觸發重構");
+      // adapter 只被呼叫一次（T-001），T-002 被 skip 不執行
+      expect(adapter.executeTask).toHaveBeenCalledTimes(1);
+    });
+
+    it("[Source] 條件滿足時 task 正常執行", async () => {
+      let callCount = 0;
+      const adapter = createMockAdapter({
+        executeTask: vi.fn(async (task: Task): Promise<TaskResult> => {
+          callCount++;
+          if (task.id === "T-001") {
+            return {
+              task_id: task.id,
+              status: "success",
+              cost_usd: 0.1,
+              metrics: { fail_rate: 0.5 }, // 超過 0.3
+            };
+          }
+          return { task_id: task.id, status: "success", cost_usd: 0.1 };
+        }),
+      });
+
+      const plan: TaskPlan = {
+        project: "test",
+        tasks: [
+          { id: "T-001", title: "Run tests", spec: "run all tests" },
+          {
+            id: "T-002",
+            title: "Refactor",
+            spec: "refactor",
+            depends_on: ["T-001"],
+            activationPredicate: {
+              type: "threshold",
+              metric: "fail_rate",
+              operator: ">",
+              value: 0.3,
+              description: "失敗率超過 30%",
+            },
+          },
+        ],
+      };
+
+      const report = await orchestrate(plan, adapter, defaultOptions);
+
+      expect(report.tasks[1].status).toBe("success");
+      expect(adapter.executeTask).toHaveBeenCalledTimes(2);
+    });
+
+    it("[Derived] 前置任務無 metrics 時條件不滿足 → skip", async () => {
+      const adapter = createMockAdapter({
+        executeTask: vi.fn(async (task: Task): Promise<TaskResult> => ({
+          task_id: task.id,
+          status: "success",
+          cost_usd: 0.1,
+          // 無 metrics 欄位
+        })),
+      });
+
+      const plan: TaskPlan = {
+        project: "test",
+        tasks: [
+          { id: "T-001", title: "A", spec: "X" },
+          {
+            id: "T-002",
+            title: "B",
+            spec: "Y",
+            depends_on: ["T-001"],
+            activationPredicate: {
+              type: "threshold",
+              metric: "fail_rate",
+              operator: ">",
+              value: 0.3,
+              description: "需要 fail_rate 度量",
+            },
+          },
+        ],
+      };
+
+      const report = await orchestrate(plan, adapter, defaultOptions);
+
+      expect(report.tasks[1].status).toBe("skipped");
+      expect(report.tasks[1].error).toContain("activation predicate not met");
+    });
+  });
+
+  describe("[AC-011-008] state_flag 類型評估", () => {
+    it("[Source] 條件不滿足時 task 被 skip", async () => {
+      const adapter = createMockAdapter({
+        executeTask: vi.fn(async (task: Task): Promise<TaskResult> => ({
+          task_id: task.id,
+          status: "success", // T-001 是 success，不是 failed
+          cost_usd: 0.1,
+        })),
+      });
+
+      const plan: TaskPlan = {
+        project: "test",
+        tasks: [
+          { id: "T-001", title: "Run tests", spec: "run tests" },
+          {
+            id: "T-002",
+            title: "Fix",
+            spec: "fix if failed",
+            depends_on: ["T-001"],
+            activationPredicate: {
+              type: "state_flag",
+              taskId: "T-001",
+              expectedStatus: "failed",
+              description: "T-001 失敗時才執行修復",
+            },
+          },
+        ],
+      };
+
+      const report = await orchestrate(plan, adapter, defaultOptions);
+
+      expect(report.tasks[1].status).toBe("skipped");
+    });
+
+    it("[Source] 條件滿足時 task 正常執行", async () => {
+      const adapter = createMockAdapter({
+        executeTask: vi.fn(async (task: Task): Promise<TaskResult> => {
+          if (task.id === "T-001") {
+            return { task_id: task.id, status: "done_with_concerns", cost_usd: 0.1, concerns: ["perf"] };
+          }
+          return { task_id: task.id, status: "success", cost_usd: 0.1 };
+        }),
+      });
+
+      const plan: TaskPlan = {
+        project: "test",
+        tasks: [
+          { id: "T-001", title: "A", spec: "X" },
+          {
+            id: "T-002",
+            title: "Review concerns",
+            spec: "review",
+            depends_on: ["T-001"],
+            activationPredicate: {
+              type: "state_flag",
+              taskId: "T-001",
+              expectedStatus: "done_with_concerns",
+              description: "T-001 有疑慮時才審查",
+            },
+          },
+        ],
+      };
+
+      const report = await orchestrate(plan, adapter, defaultOptions);
+
+      expect(report.tasks[1].status).toBe("success");
+      expect(adapter.executeTask).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("[AC-011-009] custom 類型評估", () => {
+    it("[Source] 指令回傳非零時 task 被 skip", async () => {
+      const adapter = createMockAdapter();
+
+      const plan: TaskPlan = {
+        project: "test",
+        tasks: [
+          { id: "T-001", title: "A", spec: "X" },
+          {
+            id: "T-002",
+            title: "Conditional",
+            spec: "Y",
+            depends_on: ["T-001"],
+            activationPredicate: {
+              type: "custom",
+              command: "test -f nonexistent_file_that_does_not_exist",
+              description: "檔案存在時才執行",
+            },
+          },
+        ],
+      };
+
+      const report = await orchestrate(plan, adapter, defaultOptions);
+
+      expect(report.tasks[1].status).toBe("skipped");
+      expect(report.tasks[1].error).toContain("activation predicate not met");
+    });
+
+    it("[Source] 指令回傳零時 task 正常執行", async () => {
+      const adapter = createMockAdapter();
+
+      const plan: TaskPlan = {
+        project: "test",
+        tasks: [
+          { id: "T-001", title: "A", spec: "X" },
+          {
+            id: "T-002",
+            title: "Conditional",
+            spec: "Y",
+            depends_on: ["T-001"],
+            activationPredicate: {
+              type: "custom",
+              command: "true", // 永遠回傳 0
+              description: "永遠通過",
+            },
+          },
+        ],
+      };
+
+      // 使用實際存在的目錄（custom command 需要 cwd 存在）
+      const report = await orchestrate(plan, adapter, { cwd: "/tmp" });
+
+      expect(report.tasks[1].status).toBe("success");
+      expect(adapter.executeTask).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("[AC-011-010] 向後相容", () => {
+    it("[Source] 無 activationPredicate 時行為不變", async () => {
+      const adapter = createMockAdapter();
+      const report = await orchestrate(simplePlan, adapter, defaultOptions);
+
+      expect(report.summary.total_tasks).toBe(3);
+      expect(report.summary.succeeded).toBe(3);
+      expect(report.summary.skipped).toBe(0);
+    });
+
+    it("[Derived] 並行模式無 activationPredicate 時行為不變", async () => {
+      const adapter = createMockAdapter();
+      const report = await orchestrate(simplePlan, adapter, {
+        ...defaultOptions,
+        parallel: true,
+      });
+
+      expect(report.summary.total_tasks).toBe(3);
+      expect(report.summary.succeeded).toBe(3);
+    });
+  });
+
+  describe("[AC-011-011] TaskResult.metrics 欄位", () => {
+    it("[Source] adapter 回傳的 metrics 應保留在 TaskResult 中", async () => {
+      const adapter = createMockAdapter({
+        executeTask: vi.fn(async (task: Task): Promise<TaskResult> => ({
+          task_id: task.id,
+          status: "success",
+          cost_usd: 0.1,
+          metrics: { test_coverage: 0.85, fail_rate: 0.05 },
+        })),
+      });
+
+      const plan: TaskPlan = {
+        project: "test",
+        tasks: [{ id: "T-001", title: "A", spec: "X" }],
+      };
+
+      const report = await orchestrate(plan, adapter, defaultOptions);
+
+      expect(report.tasks[0].metrics).toBeDefined();
+      expect(report.tasks[0].metrics!.test_coverage).toBe(0.85);
+      expect(report.tasks[0].metrics!.fail_rate).toBe(0.05);
+    });
+
+    it("[Source] 無 metrics 時欄位為 undefined", async () => {
+      const adapter = createMockAdapter();
+
+      const plan: TaskPlan = {
+        project: "test",
+        tasks: [{ id: "T-001", title: "A", spec: "X" }],
+      };
+
+      const report = await orchestrate(plan, adapter, defaultOptions);
+
+      expect(report.tasks[0].metrics).toBeUndefined();
+    });
+  });
+
+  describe("[AC-011-014] 既有測試零回歸", () => {
+    it("[Derived] 依賴失敗仍然 skip（不受 predicate 影響）", async () => {
+      const adapter = createMockAdapter({
+        executeTask: vi.fn(async (task: Task): Promise<TaskResult> => {
+          if (task.id === "T-001") {
+            return { task_id: task.id, status: "failed", error: "compile error" };
+          }
+          return { task_id: task.id, status: "success" };
+        }),
+      });
+
+      const report = await orchestrate(simplePlan, adapter, defaultOptions);
+
+      expect(report.summary.failed).toBe(1);
+      expect(report.summary.skipped).toBe(2);
+    });
+  });
+});

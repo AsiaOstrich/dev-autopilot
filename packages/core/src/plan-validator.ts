@@ -7,6 +7,7 @@
 
 import _Ajv from "ajv";
 import type { TaskPlan, ValidationResult } from "./types.js";
+import { detectDangerousCommand } from "./safety-hook.js";
 
 // ajv v8 是 CJS，在 ESM + NodeNext 下 default import 為 namespace
 const Ajv = _Ajv.default ?? _Ajv;
@@ -117,6 +118,23 @@ const taskSchema = {
               },
             },
           },
+          activationPredicate: {
+            type: "object",
+            required: ["type", "description"],
+            properties: {
+              type: { type: "string", enum: ["threshold", "state_flag", "custom"] },
+              description: { type: "string", minLength: 1 },
+              metric: { type: "string" },
+              operator: { type: "string", enum: [">", "<", ">=", "<=", "=="] },
+              value: { type: "number" },
+              taskId: { type: "string" },
+              expectedStatus: {
+                type: "string",
+                enum: ["success", "failed", "skipped", "timeout", "done_with_concerns", "needs_context", "blocked"],
+              },
+              command: { type: "string" },
+            },
+          },
         },
       },
     },
@@ -174,6 +192,47 @@ export function validatePlan(plan: unknown): ValidationResult {
   const cycleError = detectCycle(taskPlan.tasks);
   if (cycleError) {
     errors.push(cycleError);
+  }
+
+  // 5. ActivationPredicate 語義驗證（DEC-011）
+  for (const task of taskPlan.tasks) {
+    if (!task.activationPredicate) continue;
+    const pred = task.activationPredicate;
+
+    if (pred.type === "threshold") {
+      if (!pred.metric || !pred.operator || pred.value === undefined) {
+        errors.push(
+          `Task ${task.id}: activationPredicate threshold 類型必須同時提供 metric、operator、value`,
+        );
+      }
+    }
+
+    if (pred.type === "state_flag") {
+      if (!pred.taskId) {
+        errors.push(
+          `Task ${task.id}: activationPredicate state_flag 類型必須提供 taskId`,
+        );
+      } else if (!ids.has(pred.taskId)) {
+        errors.push(
+          `Task ${task.id}: activationPredicate 引用不存在的 Task: ${pred.taskId}`,
+        );
+      }
+    }
+
+    if (pred.type === "custom") {
+      if (!pred.command) {
+        errors.push(
+          `Task ${task.id}: activationPredicate custom 類型必須提供 command`,
+        );
+      } else {
+        const danger = detectDangerousCommand(pred.command);
+        if (danger) {
+          errors.push(
+            `Task ${task.id}: activationPredicate ${danger}`,
+          );
+        }
+      }
+    }
   }
 
   return { valid: errors.length === 0, errors };

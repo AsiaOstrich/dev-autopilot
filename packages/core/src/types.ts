@@ -59,6 +59,38 @@ export interface TestPolicy {
   static_analysis_command?: string;
 }
 
+/** 比較運算子（用於 ActivationPredicate threshold 類型） */
+export type ComparisonOperator = ">" | "<" | ">=" | "<=" | "==";
+
+/**
+ * 動態激活條件（Activation Predicate）
+ *
+ * 除了 depends_on 的靜態依賴外，可定義動態條件。
+ * 前置任務全部完成後，還需滿足此條件才會執行。
+ * 若不滿足，任務狀態設為 skipped 並記錄原因。
+ *
+ * 來源：DEC-011 Stigmergy — Activation Predicates (arXiv:2604.03997)
+ */
+export interface ActivationPredicate {
+  /** 條件類型 */
+  type: "threshold" | "state_flag" | "custom";
+
+  /** threshold 類型：檢查前置任務的度量值 */
+  metric?: string;
+  operator?: ComparisonOperator;
+  value?: number;
+
+  /** state_flag 類型：檢查特定任務的狀態 */
+  taskId?: string;
+  expectedStatus?: TaskStatus;
+
+  /** custom 類型：shell 指令回傳 0 = 滿足 */
+  command?: string;
+
+  /** 人類可讀的條件說明（必填） */
+  description: string;
+}
+
 /** Task 執行狀態 */
 export type TaskStatus =
   | "success"            // 正常完成
@@ -110,6 +142,16 @@ export interface Task {
   spec_score?: number;
   /** 規格品質滿分（Standard mode = 10, Boost mode = 25） */
   spec_max_score?: number;
+  /**
+   * 動態激活條件（Activation Predicate）
+   *
+   * 除了 depends_on 的靜態依賴外，可定義動態條件。
+   * 前置任務全部完成後，還需滿足此條件才會執行。
+   * 若不滿足，任務狀態設為 skipped 並記錄原因。
+   *
+   * 來源：DEC-011 Stigmergy — Activation Predicates
+   */
+  activationPredicate?: ActivationPredicate;
 }
 
 /**
@@ -190,6 +232,8 @@ export interface TaskResult {
   block_reason?: string;
   /** 驗證證據（借鑑 Superpowers Iron Law：Evidence before claims） */
   verification_evidence?: VerificationEvidence[];
+  /** 執行度量（供 activationPredicate threshold 類型讀取，DEC-011） */
+  metrics?: Record<string, number>;
 }
 
 /**

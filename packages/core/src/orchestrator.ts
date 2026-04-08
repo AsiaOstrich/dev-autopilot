@@ -18,6 +18,7 @@ import { DiffCapture } from "./execution-history/diff-capture.js";
 import { LogCollector } from "./execution-history/log-collector.js";
 import { parseTelemetryJsonl } from "./telemetry-parser.js";
 import type {
+  ActivationPredicate,
   AgentAdapter,
   CheckpointAction,
   CheckpointSummary,
@@ -477,6 +478,25 @@ async function executeOneTask(
     };
   }
 
+  // ActivationPredicate 評估（DEC-011）
+  if (task.activationPredicate) {
+    const satisfied = await evaluateActivationPredicate(
+      task.activationPredicate,
+      completed,
+      options.cwd,
+    );
+    if (!satisfied) {
+      const desc = task.activationPredicate.description;
+      options.onProgress?.(`[${task.id}] 跳過：activation predicate not met: ${desc}`);
+      return {
+        task_id: task.id,
+        status: "skipped",
+        duration_ms: 0,
+        error: `activation predicate not met: ${desc}`,
+      };
+    }
+  }
+
   // 執行 safety hooks
   if (options.safetyHooks) {
     const blocked = await runSafetyHooks(task, options.safetyHooks);
@@ -913,4 +933,105 @@ function buildQualityMetrics(results: TaskResult[]): import("./types.js").Qualit
     safety_issues_count: 0, // 由 plan-resolver 階段報告，此處為執行階段
     first_pass_rate: firstPassCount / total,
   };
+}
+
+/**
+ * 評估 ActivationPredicate（DEC-011 Stigmergy）
+ *
+ * @param predicate - 動態激活條件
+ * @param completed - 已完成任務的結果
+ * @param cwd - 工作目錄（custom 類型用）
+ * @returns 條件是否滿足
+ */
+async function evaluateActivationPredicate(
+  predicate: ActivationPredicate,
+  completed: Map<string, TaskResult>,
+  cwd: string,
+): Promise<boolean> {
+  switch (predicate.type) {
+    case "threshold":
+      return evaluateThreshold(predicate, completed);
+    case "state_flag":
+      return evaluateStateFlag(predicate, completed);
+    case "custom":
+      return evaluateCustom(predicate, cwd);
+    default:
+      return false;
+  }
+}
+
+/**
+ * threshold 評估：從前置任務的 metrics 中讀取度量並比較
+ */
+function evaluateThreshold(
+  predicate: ActivationPredicate,
+  completed: Map<string, TaskResult>,
+): boolean {
+  const { metric, operator, value } = predicate;
+  if (!metric || !operator || value === undefined) return false;
+
+  // 搜尋所有已完成任務的 metrics
+  for (const [, result] of completed) {
+    const metricValue = result.metrics?.[metric];
+    if (metricValue !== undefined) {
+      return compareValues(metricValue, operator, value);
+    }
+  }
+
+  // 找不到對應度量 → 條件不滿足
+  return false;
+}
+
+/**
+ * 數值比較
+ */
+function compareValues(actual: number, operator: string, expected: number): boolean {
+  switch (operator) {
+    case ">": return actual > expected;
+    case "<": return actual < expected;
+    case ">=": return actual >= expected;
+    case "<=": return actual <= expected;
+    case "==": return actual === expected;
+    default: return false;
+  }
+}
+
+/**
+ * state_flag 評估：檢查指定任務的狀態
+ */
+function evaluateStateFlag(
+  predicate: ActivationPredicate,
+  completed: Map<string, TaskResult>,
+): boolean {
+  const { taskId, expectedStatus } = predicate;
+  if (!taskId || !expectedStatus) return false;
+
+  const result = completed.get(taskId);
+  if (!result) return false;
+
+  return result.status === expectedStatus;
+}
+
+/**
+ * custom 評估：執行 shell 指令，exit code 0 = 條件滿足
+ */
+async function evaluateCustom(
+  predicate: ActivationPredicate,
+  cwd: string,
+): Promise<boolean> {
+  if (!predicate.command) return false;
+
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const execFileAsync = promisify(execFile);
+
+  try {
+    await execFileAsync("sh", ["-c", predicate.command], {
+      cwd,
+      timeout: 30_000,
+    });
+    return true; // exit code 0
+  } catch {
+    return false; // non-zero exit code
+  }
 }

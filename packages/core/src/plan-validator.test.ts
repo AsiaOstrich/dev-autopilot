@@ -249,3 +249,211 @@ describe("validatePlan", () => {
     });
   });
 });
+
+// ============================================================
+// DEC-011: Stigmergic Coordination — ActivationPredicate 驗證
+// [Source] specs/DEC-011-stigmergic-coordination.md
+// ============================================================
+
+describe("DEC-011: ActivationPredicate 驗證", () => {
+  /** 建立含 activationPredicate 的 plan */
+  function planWithPredicate(
+    predicate: Record<string, unknown>,
+    extraTasks?: Array<Record<string, unknown>>,
+  ) {
+    return {
+      project: "test",
+      tasks: [
+        ...(extraTasks ?? [{ id: "T-001", title: "Pre", spec: "prerequisite" }]),
+        {
+          id: "T-002",
+          title: "Conditional",
+          spec: "conditional task",
+          depends_on: ["T-001"],
+          activationPredicate: predicate,
+        },
+      ],
+    };
+  }
+
+  describe("[AC-011-006] JSON Schema 驗證 activationPredicate 結構", () => {
+    it("[Source] 應接受合法的 threshold predicate", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "threshold",
+        metric: "fail_rate",
+        operator: ">",
+        value: 0.3,
+        description: "失敗率超過 30%",
+      }));
+      expect(result.valid).toBe(true);
+    });
+
+    it("[Source] 應接受合法的 state_flag predicate", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "state_flag",
+        taskId: "T-001",
+        expectedStatus: "failed",
+        description: "T-001 失敗時觸發",
+      }));
+      expect(result.valid).toBe(true);
+    });
+
+    it("[Source] 應接受合法的 custom predicate", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "custom",
+        command: "test -f coverage.json",
+        description: "coverage 存在",
+      }));
+      expect(result.valid).toBe(true);
+    });
+
+    it("[Source] 應拒絕無效的 type 值", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "invalid_type",
+        description: "無效類型",
+      }));
+      expect(result.valid).toBe(false);
+    });
+
+    it("[Source] 應拒絕無效的 operator 值", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "threshold",
+        metric: "fail_rate",
+        operator: "!=",
+        value: 0.3,
+        description: "無效運算子",
+      }));
+      expect(result.valid).toBe(false);
+    });
+
+    it("[Source] 應拒絕缺少 description 的 predicate", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "threshold",
+        metric: "fail_rate",
+        operator: ">",
+        value: 0.3,
+      }));
+      expect(result.valid).toBe(false);
+    });
+  });
+
+  describe("[AC-011-003] threshold 類型語義驗證", () => {
+    it("[Source] 缺少 operator 和 value 時驗證失敗", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "threshold",
+        metric: "fail_rate",
+        description: "缺少 operator/value",
+      }));
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes("threshold") || e.includes("operator") || e.includes("value"))).toBe(true);
+    });
+
+    it("[Source] 缺少 metric 時驗證失敗", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "threshold",
+        operator: ">",
+        value: 0.3,
+        description: "缺少 metric",
+      }));
+      expect(result.valid).toBe(false);
+    });
+
+    it("[Source] 三欄位齊全時驗證通過", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "threshold",
+        metric: "fail_rate",
+        operator: ">",
+        value: 0.3,
+        description: "失敗率超過 30%",
+      }));
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe("[AC-011-004] state_flag 類型語義驗證", () => {
+    it("[Source] 引用不存在的 taskId 時驗證失敗", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "state_flag",
+        taskId: "T-999",
+        expectedStatus: "failed",
+        description: "T-999 不存在",
+      }));
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes("T-999"))).toBe(true);
+    });
+
+    it("[Source] 引用有效 taskId 時驗證通過", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "state_flag",
+        taskId: "T-001",
+        expectedStatus: "failed",
+        description: "T-001 失敗時觸發",
+      }));
+      expect(result.valid).toBe(true);
+    });
+
+    it("[Derived] 缺少 taskId 時驗證失敗", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "state_flag",
+        expectedStatus: "failed",
+        description: "缺少 taskId",
+      }));
+      expect(result.valid).toBe(false);
+    });
+  });
+
+  describe("[AC-011-005] custom 類型語義驗證", () => {
+    it("[Source] 含危險指令時驗證失敗", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "custom",
+        command: "rm -rf /",
+        description: "危險指令",
+      }));
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes("危險"))).toBe(true);
+    });
+
+    it("[Source] 安全指令驗證通過", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "custom",
+        command: "test -f coverage.json",
+        description: "coverage 存在",
+      }));
+      expect(result.valid).toBe(true);
+    });
+
+    it("[Derived] 缺少 command 時驗證失敗", () => {
+      const result = validatePlan(planWithPredicate({
+        type: "custom",
+        description: "缺少 command",
+      }));
+      expect(result.valid).toBe(false);
+    });
+  });
+
+  describe("[AC-011-010] 向後相容", () => {
+    it("[Source] 無 activationPredicate 的 plan 驗證不受影響", () => {
+      const result = validatePlan({
+        project: "test",
+        tasks: [
+          { id: "T-001", title: "A", spec: "X" },
+          { id: "T-002", title: "B", spec: "Y", depends_on: ["T-001"] },
+        ],
+      });
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe("[AC-011-013] 既有測試零回歸", () => {
+    it("[Derived] 既有最小 plan 仍通過", () => {
+      const result = validatePlan(validPlan);
+      expect(result.valid).toBe(true);
+    });
+
+    it("[Derived] 既有含依賴 plan 仍通過", () => {
+      const result = validatePlan(validPlanWithDeps);
+      expect(result.valid).toBe(true);
+    });
+  });
+});
