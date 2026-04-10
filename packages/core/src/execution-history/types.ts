@@ -9,6 +9,12 @@ export interface ExecutionHistoryConfig {
   file_server_url?: string;
   retention?: Partial<RetentionConfig>;
   extra_sensitive_patterns?: SensitivePattern[];
+  /** 是否啟用遙測上傳（opt-in，預設 false；SPEC-012） */
+  telemetryUpload?: boolean;
+  /** 遙測伺服器 URL（telemetryUpload=true 時必填；SPEC-012） */
+  telemetryServer?: string;
+  /** 遙測 API Key（空字串時不觸發上傳；SPEC-012） */
+  telemetryApiKey?: string;
 }
 
 /** L1 全域索引 */

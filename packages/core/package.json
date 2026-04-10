@@ -14,6 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@asiaostrich/telemetry-client": "*",
     "ajv": "^8.18.0"
   },
   "devDependencies": {

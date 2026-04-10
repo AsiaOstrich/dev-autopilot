@@ -13,7 +13,7 @@ import { runQualityGate, type ShellExecutor } from "./quality-gate.js";
 import { runDualStageJudge, shouldRunJudge } from "./judge.js";
 import { WorktreeManager } from "./worktree-manager.js";
 import { HistoryWriter } from "./execution-history/writer.js";
-import { LocalStorageBackend } from "./execution-history/storage-backend.js";
+import { LocalStorageBackend, FileServerStorageBackend } from "./execution-history/storage-backend.js";
 import { DiffCapture } from "./execution-history/diff-capture.js";
 import { LogCollector } from "./execution-history/log-collector.js";
 import { parseTelemetryJsonl } from "./telemetry-parser.js";
@@ -207,13 +207,36 @@ export async function orchestrate(
 
   const startTime = Date.now();
 
-  // 3. 初始化 HistoryWriter（SPEC-008，opt-in）
+  // 3. 初始化 StorageBackend + HistoryWriter（SPEC-008 / SPEC-012，opt-in）
   const historyEnabled = plan.execution_history?.enabled === true;
+  const historyConfig = plan.execution_history;
+  const localHistoryPath = join(options.cwd, ".execution-history");
+
+  // SPEC-012: backend="file_server" + telemetryUpload=true + telemetryServer 存在 + apiKey 非空
+  const useFileServer =
+    historyEnabled &&
+    historyConfig?.backend === "file_server" &&
+    historyConfig.telemetryUpload === true &&
+    !!historyConfig.telemetryServer &&
+    historyConfig.telemetryApiKey !== "";
+
+  let fileServerBackend: FileServerStorageBackend | null = null;
+
+  if (useFileServer) {
+    const { TelemetryUploader } = await import("@asiaostrich/telemetry-client");
+    const uploader = new TelemetryUploader({
+      serverUrl: historyConfig!.telemetryServer!,
+      apiKey: historyConfig!.telemetryApiKey,
+    });
+    fileServerBackend = new FileServerStorageBackend(
+      new LocalStorageBackend(localHistoryPath),
+      uploader,
+    );
+  }
+
+  const storageBackend = fileServerBackend ?? new LocalStorageBackend(localHistoryPath);
   const historyWriter = historyEnabled
-    ? new HistoryWriter(
-        new LocalStorageBackend(join(options.cwd, ".execution-history")),
-        plan.execution_history!,
-      )
+    ? new HistoryWriter(storageBackend, historyConfig!)
     : null;
 
   // 4. Wrap onProgress 收集執行日誌（若啟用歷史）
@@ -231,14 +254,21 @@ export async function orchestrate(
 
   // 6. 選擇執行模式
   try {
+    let results: TaskResult[];
     if (wrappedOptions.parallel) {
-      const results = await orchestrateParallel(plan, adapter, wrappedOptions, worktreeManager, resolvedTaskMap, historyWriter, logCollector);
-      return buildReport(results, Date.now() - startTime, wrappedOptions.qualityConfig, wrappedOptions.cwd);
+      results = await orchestrateParallel(plan, adapter, wrappedOptions, worktreeManager, resolvedTaskMap, historyWriter, logCollector);
+    } else {
+      results = await orchestrateSequential(plan, adapter, wrappedOptions, worktreeManager, resolvedTaskMap, historyWriter, logCollector);
     }
 
-    // 序列模式（原有邏輯）
-    const results = await orchestrateSequential(plan, adapter, wrappedOptions, worktreeManager, resolvedTaskMap, historyWriter, logCollector);
-    return buildReport(results, Date.now() - startTime, wrappedOptions.qualityConfig, wrappedOptions.cwd);
+    const report = buildReport(results, Date.now() - startTime, wrappedOptions.qualityConfig, wrappedOptions.cwd);
+
+    // SPEC-012: fire-and-forget L1 index snapshot 上傳（不阻塞主流程）
+    if (fileServerBackend) {
+      fileServerBackend.uploadIndexSnapshot().catch(() => {});
+    }
+
+    return report;
   } finally {
     // 清理所有 worktree
     if (worktreeManager) {
