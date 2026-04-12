@@ -88,3 +88,59 @@ export interface RunContext {
   executionLog?: Array<{ timestamp: string; message: string }>;
   previousAttempts?: Array<{ hypothesis: string; result: string }>;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SPEC-013: 獨立儲存 API 型別
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Artifact 類型（SPEC-013） */
+export type ArtifactType =
+  | "task-description"
+  | "code-diff"
+  | "test-results"
+  | "execution-log"
+  | "token-usage"
+  | "final-status"
+  | "error-analysis"
+  | "agent-reasoning";
+
+/** L1 索引條目別名（SPEC-013） */
+export type ManifestL1Entry = HistoryIndexEntry;
+
+/** L2 任務 Manifest 別名（SPEC-013） */
+export type ManifestL2 = TaskManifest;
+
+/** 單次執行 Manifest（per-run，SPEC-013） */
+export interface RunManifest {
+  run: string;
+  status: "success" | "failure" | "partial";
+  date: string;
+  duration_s: number;
+  tokens_total: number;
+  artifacts: string[];
+}
+
+/** 儲存後端配置（SPEC-013） */
+export interface StorageConfig {
+  /** .execution-history/ 的上層目錄（project root） */
+  basePath: string;
+  backend?: "local" | "file_server";
+  file_server_url?: string;
+  retention?: Partial<RetentionConfig>;
+  sensitivePatternsExtra?: SensitivePattern[];
+}
+
+/** Retention 策略別名（SPEC-013） */
+export type RetentionPolicy = RetentionConfig;
+
+/** recordRun 的 artifacts 輸入（SPEC-013） */
+export interface RunArtifacts {
+  taskId: string;
+  taskName: string;
+  tags?: string[];
+  status: "success" | "failure" | "partial";
+  /** artifact 類型 → 原始字串內容 */
+  content: Partial<Record<ArtifactType, string>>;
+  durationS?: number;
+  tokensTotal?: number;
+}
