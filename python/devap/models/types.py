@@ -18,6 +18,9 @@ from pydantic import BaseModel, Field
 AgentType = Literal["claude", "opencode", "codex", "cline", "cursor", "cli"]
 """支援的 AI Agent 類型"""
 
+EpistemicActionType = Literal["answer", "ask", "abstain"]
+"""Agent 認知動作類型（XSPEC-008, DEC-014）"""
+
 TestLevelName = Literal["unit", "integration", "system", "e2e"]
 """多層級測試名稱"""
 
@@ -231,7 +234,7 @@ class FixLoopResult(BaseModel):
     success: bool
     attempts: list[FixLoopAttempt] = Field(default_factory=list)
     total_retry_cost_usd: float = 0.0
-    stop_reason: Literal["passed", "max_retries", "budget_exceeded"] = "max_retries"
+    stop_reason: Literal["passed", "max_retries", "budget_exceeded", "ask", "abstain"] = "max_retries"
 
 
 class FixFeedback(BaseModel):

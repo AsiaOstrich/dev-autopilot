@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Literal, Optional
 
-from devap.models.types import FixLoopAttempt, FixLoopConfig, FixLoopResult
+from devap.models.types import EpistemicActionType, FixLoopAttempt, FixLoopConfig, FixLoopResult
 
 
 @dataclass
@@ -20,6 +20,7 @@ class ExecuteResult:
     success: bool
     cost_usd: float
     feedback: Optional[str] = None
+    epistemic_action: Optional[EpistemicActionType] = None  # None = 預設 "answer"
 
 
 # 回呼函式類型
@@ -74,6 +75,21 @@ async def run_fix_loop(
             )
 
         result = await execute(last_feedback, i)
+
+        # 認知路由：ask/abstain 不重試（XSPEC-008 Phase 4）
+        if result.epistemic_action in ("ask", "abstain"):
+            attempt = FixLoopAttempt(
+                attempt=i,
+                success=False,
+                cost_usd=result.cost_usd,
+                feedback=result.feedback,
+            )
+            return FixLoopResult(
+                success=False,
+                attempts=[*attempts, attempt],
+                total_retry_cost_usd=total_retry_cost,
+                stop_reason=result.epistemic_action,  # "ask" or "abstain"
+            )
 
         attempt = FixLoopAttempt(
             attempt=i,

@@ -355,6 +355,15 @@ async def _execute_one_task(
             (time.monotonic() - start_time) * 1000
         )
         on_progress and on_progress(f"[{task.id}] 完成：{result.status}")
+        # 認知路由：區分有意識的 ask/abstain 與執行失敗（XSPEC-008 Phase 4）
+        if result.status == "needs_context":
+            on_progress and on_progress(
+                f"[{task.id}] 需要更多資訊（ask）：{result.needed_context or '未指定'}"
+            )
+        elif result.status == "blocked":
+            on_progress and on_progress(
+                f"[{task.id}] 有意識的放棄（abstain）：{result.block_reason or '未指定'}"
+            )
         return result
     except Exception as e:
         duration_ms = (time.monotonic() - start_time) * 1000

@@ -181,3 +181,75 @@ class TestOrchestrate:
         )
         assert report.summary.failed == 1
         assert "safety hook" in (report.tasks[0].error or "")
+
+
+class TestEpistemicRouting:
+    """XSPEC-008 Phase 4: 認知路由測試"""
+
+    @pytest.mark.asyncio
+    async def test_needs_context_not_treated_as_failure(self):
+        """needs_context 任務不因 log 訊息被誤判為失敗"""
+        progress_messages = []
+
+        class AskAdapter(AgentAdapter):
+            @property
+            def name(self) -> str:
+                return "claude"
+
+            async def execute_task(self, task, opts):
+                return TaskResult(
+                    task_id=task.id,
+                    status="needs_context",
+                    needed_context="需要 API 規格",
+                )
+
+            async def is_available(self) -> bool:
+                return True
+
+        plan = TaskPlan(
+            project="test",
+            tasks=[Task(id="T-001", title="Ask Task", spec="test")],
+        )
+        report = await orchestrate(
+            plan,
+            AskAdapter(),
+            cwd="/tmp",
+            on_progress=progress_messages.append,
+        )
+        assert report.summary.needs_context == 1
+        assert report.summary.failed == 0
+        assert any("ask" in m.lower() or "需要更多資訊" in m for m in progress_messages)
+
+    @pytest.mark.asyncio
+    async def test_blocked_not_treated_as_failure(self):
+        """blocked 任務不因 log 訊息被誤判為失敗"""
+        progress_messages = []
+
+        class AbstainAdapter(AgentAdapter):
+            @property
+            def name(self) -> str:
+                return "claude"
+
+            async def execute_task(self, task, opts):
+                return TaskResult(
+                    task_id=task.id,
+                    status="blocked",
+                    block_reason="超出能力範圍",
+                )
+
+            async def is_available(self) -> bool:
+                return True
+
+        plan = TaskPlan(
+            project="test",
+            tasks=[Task(id="T-001", title="Abstain Task", spec="test")],
+        )
+        report = await orchestrate(
+            plan,
+            AbstainAdapter(),
+            cwd="/tmp",
+            on_progress=progress_messages.append,
+        )
+        assert report.summary.blocked == 1
+        assert report.summary.failed == 0
+        assert any("abstain" in m.lower() or "有意識" in m for m in progress_messages)
