@@ -38,13 +38,30 @@ export interface QualityGateResult {
 export interface QualityGateStep {
   /** 步驟名稱 */
   name: "verify" | "lint" | "type_check" | "static_analysis" | "completion_check"
-       | "unit" | "integration" | "system" | "e2e" | "agents_md_check";
+       | "unit" | "integration" | "system" | "e2e" | "agents_md_check"
+       | "frontend_design_check";
   /** 執行的指令 */
   command: string;
   /** 是否通過 */
   passed: boolean;
   /** 指令輸出（stdout + stderr） */
   output: string;
+}
+
+/**
+ * 前端設計合規性檢查結果
+ *
+ * 包含缺失的必填段落與警告訊息。
+ */
+export interface FrontendDesignCheckResult {
+  /** 檢查步驟結果 */
+  step: QualityGateStep;
+  /** 缺失的必填段落列表 */
+  missingSections?: string[];
+  /** 缺失的語義色彩 token 列表 */
+  missingColorTokens?: string[];
+  /** 反模式條目不足（實際數量） */
+  antiPatternCount?: number;
 }
 
 /**
@@ -237,6 +254,22 @@ export async function runQualityGate(
     }
   }
 
+  // 前端設計合規性檢查（非阻塞，僅 warning）
+  // 純後端 API 或 CLI 專案若無 DESIGN.md，不視為錯誤
+  const frontendDesignResult = await checkFrontendDesignCompliance(options.cwd);
+  if (frontendDesignResult) {
+    steps.push(frontendDesignResult.step);
+    evidence.push({
+      command: "frontend_design_check",
+      exit_code: frontendDesignResult.step.passed ? 0 : 1,
+      output: frontendDesignResult.step.output.slice(0, 2000),
+      timestamp: new Date().toISOString(),
+    });
+    if (!frontendDesignResult.step.passed) {
+      options.onProgress?.(`[${task.id}] Quality Gate: DESIGN.md compliance issues detected (warning only)`);
+    }
+  }
+
   return {
     passed: true,
     steps,
@@ -371,6 +404,144 @@ export async function checkAgentsMdSync(
       output: `AGENTS.md drift detected:\n${details.join("\n")}\n建議執行 uds update 更新。`,
     },
     driftedFiles: drifted,
+  };
+}
+
+/**
+ * 前端設計合規性驗證常數
+ *
+ * 來源：UDS frontend-design-standards.ai.yaml（XSPEC-026 Phase 1）
+ */
+
+/** DESIGN.md 必填段落（支援 snake_case 和 kebab-case 兩種格式） */
+const REQUIRED_DESIGN_SECTIONS = [
+  ["visual_theme", "visual-theme"],
+  ["color_palette", "color-palette"],
+  ["typography"],
+  ["component_styling", "component-styling"],
+  ["layout_spacing", "layout-spacing"],
+  ["design_guidelines", "design-guidelines"],
+] as const;
+
+/** 語義色彩必要 token（支援 snake_case 和 kebab-case 兩種格式） */
+const REQUIRED_COLOR_TOKENS = [
+  ["background"],
+  ["surface"],
+  ["primary_text", "primary-text"],
+  ["muted_text", "muted-text"],
+  ["accent"],
+] as const;
+
+/** design_guidelines.anti_patterns 建議最低條目數 */
+const MIN_ANTI_PATTERN_COUNT = 5;
+
+/**
+ * 驗證前端設計合規性
+ *
+ * 非阻塞：DESIGN.md 不存在時回傳 null（純後端專案不應被 block）。
+ * DESIGN.md 存在時驗證：
+ * 1. 6 個必填段落是否完整
+ * 2. 語義色彩 5 個必要 token 是否存在（warn）
+ * 3. anti_patterns 條目數是否 ≥ 5（warn）
+ *
+ * @param cwd - 專案根目錄
+ * @returns FrontendDesignCheckResult 或 null（若無 DESIGN.md）
+ */
+export async function checkFrontendDesignCompliance(
+  cwd: string,
+): Promise<FrontendDesignCheckResult | null> {
+  const designMdPath = join(cwd, "DESIGN.md");
+
+  let content: string;
+  try {
+    content = await readFile(designMdPath, "utf-8");
+  } catch {
+    // DESIGN.md 不存在 → 跳過（非前端專案不應被 block）
+    return null;
+  }
+
+  const issues: string[] = [];
+  const missingSections: string[] = [];
+  const missingColorTokens: string[] = [];
+  let antiPatternCount: number | undefined;
+
+  // 1. 必填段落完整性檢查
+  for (const aliases of REQUIRED_DESIGN_SECTIONS) {
+    const found = aliases.some(alias =>
+      // 符合 Markdown heading（## section_name）或 YAML key（section_name:）
+      new RegExp(`(?:^#{1,6}\\s+${alias}\\b|^${alias}\\s*:)`, "im").test(content)
+    );
+    if (!found) {
+      const primaryName = aliases[0];
+      missingSections.push(primaryName);
+    }
+  }
+
+  if (missingSections.length > 0) {
+    issues.push(
+      `缺少必填段落（${missingSections.length} 個）：${missingSections.join(", ")}\n` +
+      `  → 請在 DESIGN.md 中補充上述段落（支援 ## section_name 或 section_name: 格式）`
+    );
+  }
+
+  // 2. 語義色彩 token 檢查（warn）
+  for (const aliases of REQUIRED_COLOR_TOKENS) {
+    const found = aliases.some(alias =>
+      new RegExp(`\\b${alias}\\s*[=:\\-]`, "i").test(content)
+    );
+    if (!found) {
+      missingColorTokens.push(aliases[0]);
+    }
+  }
+
+  if (missingColorTokens.length > 0) {
+    issues.push(
+      `語義色彩 token 不完整，缺少：${missingColorTokens.join(", ")}\n` +
+      `  → 建議在 color_palette 段落中補充上述 token`
+    );
+  }
+
+  // 3. anti_patterns 條目數檢查（warn）
+  // 計算 anti_patterns 區塊中的清單條目（- 或 * 開頭的行）
+  const antiPatternSection = content.match(
+    /(?:anti[_-]patterns?)\s*[:\n]([^]*?)(?=\n#{1,6}\s|\n\w+[_-]\w+\s*:|$)/i
+  );
+  if (antiPatternSection) {
+    const listItems = (antiPatternSection[1].match(/^\s*[-*+]\s+\S/gm) ?? []).length;
+    antiPatternCount = listItems;
+    if (listItems < MIN_ANTI_PATTERN_COUNT) {
+      issues.push(
+        `design_guidelines.anti_patterns 條目不足（目前 ${listItems} 條，建議 ≥ ${MIN_ANTI_PATTERN_COUNT} 條）\n` +
+        `  → 請補充常見的前端設計反模式`
+      );
+    }
+  }
+
+  const passed = missingSections.length === 0;
+  const outputLines: string[] = [];
+
+  if (passed && issues.length === 0) {
+    outputLines.push("DESIGN.md 前端設計合規性驗證通過。");
+  } else {
+    outputLines.push("DESIGN.md 前端設計合規性問題：");
+    outputLines.push(...issues.map((issue, i) => `\n[${i + 1}] ${issue}`));
+    if (passed) {
+      outputLines.push("\n（必填段落完整，上述為 warning 項目）");
+    } else {
+      outputLines.push("\n請修正上述 error 項目（必填段落缺失），warning 項目建議補充。");
+    }
+  }
+
+  return {
+    step: {
+      name: "frontend_design_check",
+      command: "frontend_design_check",
+      passed,
+      output: outputLines.join(""),
+    },
+    missingSections: missingSections.length > 0 ? missingSections : undefined,
+    missingColorTokens: missingColorTokens.length > 0 ? missingColorTokens : undefined,
+    antiPatternCount,
   };
 }
 

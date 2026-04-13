@@ -5,7 +5,7 @@ export { createDefaultSafetyHook, detectDangerousCommand, detectHardcodedSecrets
 export { WorktreeManager, type WorktreeInfo } from "./worktree-manager.js";
 export { generateClaudeMd, writeClaudeMd, type ClaudeMdOptions } from "./claudemd-generator.js";
 export { runJudge, runDualStageJudge, shouldRunJudge, buildJudgePrompt, parseJudgeOutput, type JudgeResult, type JudgeVerdict, type JudgeOptions, type CriteriaResult } from "./judge.js";
-export { runQualityGate, type QualityGateResult, type QualityGateStep, type QualityGateOptions, type ShellExecutor, type HookTelemetry } from "./quality-gate.js";
+export { runQualityGate, checkAgentsMdSync, checkFrontendDesignCompliance, type QualityGateResult, type QualityGateStep, type QualityGateOptions, type ShellExecutor, type HookTelemetry, type FrontendDesignCheckResult } from "./quality-gate.js";
 export { resolvePlan, type PlanResolverOptions } from "./plan-resolver.js";
 export { resolveQualityProfile, checkQualityWarnings } from "./quality-profile.js";
 export { runFixLoop, buildStructuredFeedback, type ExecuteResult, type FixLoopCallbacks } from "./fix-loop.js";

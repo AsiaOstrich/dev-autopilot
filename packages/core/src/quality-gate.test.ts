@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { runQualityGate, checkAgentsMdSync, type ShellExecutor } from "./quality-gate.js";
+import { runQualityGate, checkAgentsMdSync, checkFrontendDesignCompliance, type ShellExecutor } from "./quality-gate.js";
 import type { QualityConfig, Task } from "./types.js";
 
 const baseTask: Task = {
@@ -558,5 +558,243 @@ describe("checkAgentsMdSync — AGENTS.md 合規檢查", () => {
     expect(result).not.toBeNull();
     expect(result!.step.passed).toBe(false);
     expect(result!.step.output).toContain("不存在");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// checkFrontendDesignCompliance — 前端設計合規性檢查
+// AC-3.1：驗證 DESIGN.md 存在性
+// AC-3.2：驗證必填欄位完整性，缺失時回報具體欄位名稱
+// AC-3.3：失敗時給出清楚的錯誤訊息
+// ─────────────────────────────────────────────────────────────
+describe("checkFrontendDesignCompliance — 前端設計合規性檢查", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "devap-fd-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  // AC-3.1：DESIGN.md 不存在時回傳 null（純後端/CLI 專案不 block）
+  it("DESIGN.md 不存在時回傳 null（非前端專案不被 block）", async () => {
+    const result = await checkFrontendDesignCompliance(tmpDir);
+    expect(result).toBeNull();
+  });
+
+  // AC-3.1 + AC-3.2：有效的完整 DESIGN.md → passed=true
+  it("DESIGN.md 包含所有必填段落 → passed=true", async () => {
+    const validDesignMd = [
+      "# DESIGN",
+      "",
+      "## visual_theme",
+      "Light theme.",
+      "",
+      "## color_palette",
+      "background: #ffffff",
+      "surface: #f5f5f5",
+      "primary_text: #111111",
+      "muted_text: #888888",
+      "accent: #0070f3",
+      "",
+      "## typography",
+      "font-family: Inter",
+      "",
+      "## component_styling",
+      "border-radius: 4px",
+      "",
+      "## layout_spacing",
+      "base: 8px",
+      "",
+      "## design_guidelines",
+      "",
+      "### anti_patterns",
+      "- 禁止使用魔術數字",
+      "- 禁止內嵌樣式",
+      "- 禁止超過 3 層巢狀",
+      "- 禁止不語義化的顏色",
+      "- 禁止跳過視覺層級",
+    ].join("\n");
+
+    await writeFile(join(tmpDir, "DESIGN.md"), validDesignMd);
+    const result = await checkFrontendDesignCompliance(tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.step.passed).toBe(true);
+    expect(result!.step.name).toBe("frontend_design_check");
+    expect(result!.missingSections).toBeUndefined();
+  });
+
+  // AC-3.2：缺少必填段落時 passed=false，並回報具體缺失欄位名稱
+  it("缺少必填段落 → passed=false 且 missingSections 包含具體欄位名稱", async () => {
+    const incompleteDesignMd = [
+      "# DESIGN",
+      "",
+      "## visual_theme",
+      "Light theme.",
+      "",
+      "## color_palette",
+      "background: #fff",
+      // 缺少 typography、component_styling、layout_spacing、design_guidelines
+    ].join("\n");
+
+    await writeFile(join(tmpDir, "DESIGN.md"), incompleteDesignMd);
+    const result = await checkFrontendDesignCompliance(tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.step.passed).toBe(false);
+    expect(result!.missingSections).toBeDefined();
+    expect(result!.missingSections).toContain("typography");
+    expect(result!.missingSections).toContain("component_styling");
+    expect(result!.missingSections).toContain("layout_spacing");
+    expect(result!.missingSections).toContain("design_guidelines");
+  });
+
+  // AC-3.3：錯誤訊息應清楚說明缺失內容
+  it("錯誤訊息應包含缺失段落的具體名稱", async () => {
+    const partialDesignMd = [
+      "# DESIGN",
+      "## visual_theme",
+      "Dark theme.",
+      // 缺少其他所有必填段落
+    ].join("\n");
+
+    await writeFile(join(tmpDir, "DESIGN.md"), partialDesignMd);
+    const result = await checkFrontendDesignCompliance(tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.step.passed).toBe(false);
+    // AC-3.3：錯誤訊息必須明確指出缺失內容
+    expect(result!.step.output).toContain("缺少必填段落");
+    expect(result!.step.output).toContain("color_palette");
+    expect(result!.step.output).toContain("typography");
+  });
+
+  // 語義色彩 token 缺失 → 警告（passed 仍為 true，因為必填段落完整）
+  it("必填段落完整但缺少語義色彩 token → passed=true（警告）且 missingColorTokens 有值", async () => {
+    const missingTokenDesign = [
+      "# DESIGN",
+      "## visual_theme",
+      "Light.",
+      "## color_palette",
+      "background: #fff",
+      // 缺少 surface、primary_text、muted_text、accent
+      "## typography",
+      "font: Inter",
+      "## component_styling",
+      "border: 4px",
+      "## layout_spacing",
+      "base: 8",
+      "## design_guidelines",
+      "### anti_patterns",
+      "- 禁止魔術數字",
+      "- 禁止內嵌樣式",
+      "- 禁止不語義顏色",
+      "- 禁止跳過層級",
+      "- 禁止過深巢狀",
+    ].join("\n");
+
+    await writeFile(join(tmpDir, "DESIGN.md"), missingTokenDesign);
+    const result = await checkFrontendDesignCompliance(tmpDir);
+    expect(result).not.toBeNull();
+    // 必填段落完整 → passed=true（僅 warn）
+    expect(result!.step.passed).toBe(true);
+    expect(result!.missingColorTokens).toBeDefined();
+    expect(result!.missingColorTokens).toContain("surface");
+  });
+
+  // anti_patterns 不足 → 警告
+  it("anti_patterns 條目不足（< 5）→ passed=true（警告）且 antiPatternCount 正確", async () => {
+    const fewAntiPatterns = [
+      "# DESIGN",
+      "## visual_theme",
+      "Light.",
+      "## color_palette",
+      "background: #fff",
+      "surface: #f5f5f5",
+      "primary_text: #111",
+      "muted_text: #888",
+      "accent: #07f",
+      "## typography",
+      "font: Inter",
+      "## component_styling",
+      "border: 4px",
+      "## layout_spacing",
+      "base: 8",
+      "## design_guidelines",
+      "### anti_patterns",
+      "- 禁止魔術數字",
+      "- 禁止內嵌樣式",
+      // 只有 2 條，不足 5 條
+    ].join("\n");
+
+    await writeFile(join(tmpDir, "DESIGN.md"), fewAntiPatterns);
+    const result = await checkFrontendDesignCompliance(tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.step.passed).toBe(true);
+    expect(result!.antiPatternCount).toBeDefined();
+    expect(result!.antiPatternCount!).toBeLessThan(5);
+    expect(result!.step.output).toContain("anti_patterns");
+  });
+
+  // kebab-case 格式也應被識別（如 ## visual-theme）
+  it("kebab-case 段落名稱也應被識別為合規", async () => {
+    const kebabDesignMd = [
+      "# DESIGN",
+      "## visual-theme",
+      "Light.",
+      "## color-palette",
+      "background: #fff",
+      "surface: #f5f",
+      "primary-text: #111",
+      "muted-text: #888",
+      "accent: #07f",
+      "## typography",
+      "font: Inter",
+      "## component-styling",
+      "border: 4px",
+      "## layout-spacing",
+      "base: 8",
+      "## design-guidelines",
+      "### anti_patterns",
+      "- a",
+      "- b",
+      "- c",
+      "- d",
+      "- e",
+    ].join("\n");
+
+    await writeFile(join(tmpDir, "DESIGN.md"), kebabDesignMd);
+    const result = await checkFrontendDesignCompliance(tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.step.passed).toBe(true);
+    expect(result!.missingSections).toBeUndefined();
+  });
+
+  // runQualityGate 整合：DESIGN.md 存在且有問題時，整體仍 passed（非阻塞）
+  it("runQualityGate 整合：DESIGN.md 有問題但不 block 整體 QualityGate", async () => {
+    // 寫一個缺少必填段落的 DESIGN.md
+    await writeFile(join(tmpDir, "DESIGN.md"), "# DESIGN\n## visual_theme\nLight.");
+
+    const shell = vi.fn(async () => ({ exitCode: 0, stdout: "ok", stderr: "" }));
+    const taskNoVerify: Task = { id: "T-001", title: "X", spec: "x" };
+    const qc: QualityConfig = {
+      verify: false,
+      judge_policy: "never",
+      max_retries: 0,
+      max_retry_budget_usd: 0,
+    };
+
+    const result = await runQualityGate(taskNoVerify, qc, {
+      cwd: tmpDir,
+      shellExecutor: shell,
+    });
+
+    // 整體仍然 passed（frontend_design_check 為非阻塞）
+    expect(result.passed).toBe(true);
+    // 但 steps 中應有 frontend_design_check 步驟
+    const fdStep = result.steps.find(s => s.name === "frontend_design_check");
+    expect(fdStep).toBeDefined();
+    expect(fdStep!.passed).toBe(false);
+    expect(fdStep!.output).toContain("缺少必填段落");
   });
 });
