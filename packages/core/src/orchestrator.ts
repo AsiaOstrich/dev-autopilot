@@ -380,6 +380,9 @@ async function orchestrateParallel(
 
   const checkpointPolicy = options.checkpointPolicy ?? "never";
 
+  // Fork Mode Cache-Safe 平行（XSPEC-038）：追蹤前一層的單一成功 session
+  let forkBaseSessionId: string | undefined;
+
   for (let layerIdx = 0; layerIdx < layers.length; layerIdx++) {
     // Plan 層級預算檢查（SPEC-005 AC-005-003）
     if (plan.max_total_budget_usd && totalCostAccum >= plan.max_total_budget_usd) {
@@ -407,8 +410,20 @@ async function orchestrateParallel(
     const layerResults: TaskResult[] = [];
     for (let i = 0; i < mergedTasks.length; i += maxParallel) {
       const batch = mergedTasks.slice(i, i + maxParallel);
+
+      // Fork Mode（XSPEC-038）：若前一層恰好 1 個成功 Task + 本批次 ≥ 2 個 Task，共享 base session
+      const useForkSession = options.parallelForkMode && !!forkBaseSessionId && batch.length >= 2;
+      if (useForkSession) {
+        options.onProgress?.(`[層 ${layerIdx + 1}] Fork Mode：${batch.length} 個 Tasks 共享 base session ${forkBaseSessionId}`);
+      }
+
       const batchResults = await Promise.all(
-        batch.map(task => executeOneTask(task, adapter, options, completed, worktreeManager)),
+        batch.map(task => {
+          const taskOptions = useForkSession
+            ? { ...options, sessionId: forkBaseSessionId }
+            : options;
+          return executeOneTask(task, adapter, taskOptions, completed, worktreeManager, useForkSession ? true : undefined);
+        }),
       );
       layerResults.push(...batchResults);
     }
@@ -430,6 +445,12 @@ async function orchestrateParallel(
           });
         }
       }
+    }
+
+    // Fork Mode（XSPEC-038）：計算本層是否有且僅有 1 個成功 Task 且有 session_id
+    if (options.parallelForkMode) {
+      const successfulWithSession = layerResults.filter(r => r.status === "success" && r.session_id);
+      forkBaseSessionId = successfulWithSession.length === 1 ? successfulWithSession[0].session_id : undefined;
     }
 
     // 層間 Checkpoint
@@ -492,6 +513,7 @@ async function executeOneTask(
   options: OrchestratorOptions,
   completed: Map<string, TaskResult>,
   worktreeManager?: WorktreeManager,
+  forkSession?: boolean,
 ): Promise<TaskResult> {
   // 檢查依賴是否都成功（done_with_concerns 也視為可繼續）
   const depsFailed = (task.depends_on ?? []).some((dep) => {
@@ -547,11 +569,11 @@ async function executeOneTask(
 
   // 無品質設定（none 或未設定）→ 走原有邏輯
   if (!qc || (!qc.verify && qc.judge_policy === "never" && qc.max_retries === 0)) {
-    return executeTaskSimple(task, adapter, options, taskStartTime, worktreeManager);
+    return executeTaskSimple(task, adapter, options, taskStartTime, worktreeManager, forkSession);
   }
 
   // 有品質設定 → 走 fix loop + quality gate + judge
-  return executeTaskWithQuality(task, adapter, options, qc, taskStartTime, worktreeManager);
+  return executeTaskWithQuality(task, adapter, options, qc, taskStartTime, worktreeManager, forkSession);
 }
 
 /**
@@ -563,6 +585,7 @@ async function executeTaskSimple(
   options: OrchestratorOptions,
   taskStartTime: number,
   worktreeManager?: WorktreeManager,
+  forkSession?: boolean,
 ): Promise<TaskResult> {
   options.onProgress?.(`[${task.id}] 開始執行：${task.title}`);
 
@@ -582,7 +605,8 @@ async function executeTaskSimple(
     const execOpts: ExecuteOptions = {
       cwd: taskCwd,
       sessionId: options.sessionId,
-      forkSession: task.fork_session,
+      // Fork Mode（XSPEC-038）：forkSession 優先，其次用 task 層設定
+      forkSession: forkSession ?? task.fork_session,
       onProgress: options.onProgress,
       modelTier: task.model_tier,
     };
@@ -623,6 +647,7 @@ async function executeTaskWithQuality(
   qc: QualityConfig,
   taskStartTime: number,
   worktreeManager?: WorktreeManager,
+  forkSession?: boolean,
 ): Promise<TaskResult> {
   options.onProgress?.(`[${task.id}] 開始執行（品質模式）：${task.title}`);
 
@@ -653,7 +678,8 @@ async function executeTaskWithQuality(
           const execOpts: ExecuteOptions = {
             cwd: taskCwd,
             sessionId: options.sessionId,
-            forkSession: task.fork_session,
+            // Fork Mode（XSPEC-038）：forkSession 優先，其次用 task 層設定
+            forkSession: forkSession ?? task.fork_session,
             onProgress: options.onProgress,
             modelTier: task.model_tier,
           };

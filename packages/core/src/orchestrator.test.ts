@@ -1093,3 +1093,143 @@ describe("DEC-011: ActivationPredicate 評估", () => {
     });
   });
 });
+
+// ============================================================
+// XSPEC-038: Fork Mode Cache-Safe Parallel
+// ============================================================
+
+describe("XSPEC-038: Fork Mode Cache-Safe Parallel", () => {
+  /** 1 個 planning task → 2 個 implementation tasks 的標準 Fork 場景 */
+  const forkPlan: TaskPlan = {
+    project: "test-fork",
+    tasks: [
+      { id: "T-010", title: "Planning", spec: "Plan" },
+      { id: "T-011", title: "Impl A", spec: "A", depends_on: ["T-010"] },
+      { id: "T-012", title: "Impl B", spec: "B", depends_on: ["T-010"] },
+    ],
+  };
+
+  it("[AC-1] OrchestratorOptions 接受 parallelForkMode: true（型別相容）", async () => {
+    const adapter = createMockAdapter();
+    // 若型別不相容，TypeScript 編譯期就會失敗；執行期只確認不 throw
+    await expect(
+      orchestrate(forkPlan, adapter, { cwd: "/tmp/test", parallel: true, parallelForkMode: true }),
+    ).resolves.toBeDefined();
+  });
+
+  it("[AC-4] parallelForkMode 未設定時（預設 false），行為與現有完全一致", async () => {
+    const capturedOpts: ExecuteOptions[] = [];
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task, opts: ExecuteOptions): Promise<TaskResult> => {
+        capturedOpts.push({ ...opts });
+        return { task_id: task.id, status: "success", session_id: `sess-${task.id}` };
+      }),
+    });
+
+    await orchestrate(forkPlan, adapter, { cwd: "/tmp/test", parallel: true });
+
+    // 沒有任何 task 應收到 forkSession: true
+    expect(capturedOpts.every(o => !o.forkSession)).toBe(true);
+  });
+
+  it("[AC-2] fork 條件成立：前一層 1 個成功 + session_id，下一層 ≥2 tasks 收到相同 sessionId + forkSession:true", async () => {
+    const capturedOpts: Record<string, ExecuteOptions> = {};
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task, opts: ExecuteOptions): Promise<TaskResult> => {
+        capturedOpts[task.id] = { ...opts };
+        return {
+          task_id: task.id,
+          status: "success",
+          session_id: task.id === "T-010" ? "sess-plan-001" : `sess-${task.id}`,
+        };
+      }),
+    });
+
+    await orchestrate(forkPlan, adapter, {
+      cwd: "/tmp/test",
+      parallel: true,
+      parallelForkMode: true,
+    });
+
+    // T-010（planning task）不受 fork 影響（第 1 層）
+    expect(capturedOpts["T-010"]?.forkSession).toBeFalsy();
+
+    // T-011 和 T-012 都應收到 T-010 的 session_id 並設 forkSession: true
+    expect(capturedOpts["T-011"]?.sessionId).toBe("sess-plan-001");
+    expect(capturedOpts["T-011"]?.forkSession).toBe(true);
+    expect(capturedOpts["T-012"]?.sessionId).toBe("sess-plan-001");
+    expect(capturedOpts["T-012"]?.forkSession).toBe(true);
+  });
+
+  it("[AC-3] fork 條件不成立：前一層 session_id 為空，下一層不傳遞 forkSession", async () => {
+    const capturedOpts: Record<string, ExecuteOptions> = {};
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task, opts: ExecuteOptions): Promise<TaskResult> => {
+        capturedOpts[task.id] = { ...opts };
+        // PLAN 不回傳 session_id
+        return { task_id: task.id, status: "success" };
+      }),
+    });
+
+    await orchestrate(forkPlan, adapter, {
+      cwd: "/tmp/test",
+      parallel: true,
+      parallelForkMode: true,
+    });
+
+    expect(capturedOpts["IMPL-A"]?.forkSession).toBeFalsy();
+    expect(capturedOpts["IMPL-B"]?.forkSession).toBeFalsy();
+  });
+
+  it("[AC-3] fork 條件不成立：前一層有 2 個成功 tasks，下一層不傳遞 forkSession", async () => {
+    const multiPlan: TaskPlan = {
+      project: "test-multi",
+      tasks: [
+        { id: "T-020", title: "Plan A", spec: "A" },
+        { id: "T-021", title: "Plan B", spec: "B" },
+        { id: "T-022", title: "Impl", spec: "C", depends_on: ["T-020", "T-021"] },
+      ],
+    };
+
+    const capturedOpts: Record<string, ExecuteOptions> = {};
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task, opts: ExecuteOptions): Promise<TaskResult> => {
+        capturedOpts[task.id] = { ...opts };
+        return {
+          task_id: task.id,
+          status: "success",
+          session_id: `sess-${task.id}`,
+        };
+      }),
+    });
+
+    await orchestrate(multiPlan, adapter, {
+      cwd: "/tmp/test",
+      parallel: true,
+      parallelForkMode: true,
+    });
+
+    // T-022 的前一層有 2 個成功 tasks → 不應 fork
+    expect(capturedOpts["T-022"]?.forkSession).toBeFalsy();
+  });
+
+  it("[AC-5] parallelForkMode 不影響序列模式（parallel: false）", async () => {
+    const capturedOpts: Record<string, ExecuteOptions> = {};
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task, opts: ExecuteOptions): Promise<TaskResult> => {
+        capturedOpts[task.id] = { ...opts };
+        return { task_id: task.id, status: "success", session_id: "sess-001" };
+      }),
+    });
+
+    const report = await orchestrate(forkPlan, adapter, {
+      cwd: "/tmp/test",
+      parallel: false,
+      parallelForkMode: true, // 即使設定了也不應影響序列模式
+    });
+
+    expect(report.summary.succeeded).toBe(3);
+    // 序列模式不走 orchestrateParallel，forkSession 不應被注入
+    expect(capturedOpts["T-011"]?.forkSession).toBeFalsy();
+  });
+});

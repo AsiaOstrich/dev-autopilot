@@ -735,6 +735,16 @@ export interface OrchestratorOptions {
   isolation?: "none" | "worktree";
   /** 專案原始 CLAUDE.md 路徑（用於 generated_prompt 生成） */
   existingClaudeMdPath?: string;
+  /**
+   * Fork Mode Cache-Safe 並行（XSPEC-038）
+   *
+   * 啟用時，若前一層恰好只有 1 個成功 Task 且產生了 session_id，
+   * 則將該 session_id 作為下一層所有並行 Task 的 base session，
+   * 透過 forkSession:true 共享 Anthropic prompt cache prefix。
+   *
+   * 預設 false，不影響現有行為。
+   */
+  parallelForkMode?: boolean;
 }
 
 /**
