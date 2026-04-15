@@ -10,6 +10,7 @@ import { resolve, join } from "node:path";
 import { Command } from "commander";
 import { registerInitCommand } from "./commands/init.js";
 import { registerSyncStandardsCommand } from "./commands/sync-standards.js";
+import { registerPackageCommand } from "./commands/package.js";
 import {
   orchestrate,
   validatePlan,
@@ -143,5 +144,6 @@ program
 
 registerInitCommand(program);
 registerSyncStandardsCommand(program);
+registerPackageCommand(program);
 
 program.parse();

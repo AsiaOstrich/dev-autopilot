@@ -12,3 +12,6 @@ export { runFixLoop, buildStructuredFeedback, type ExecuteResult, type FixLoopCa
 export { parseTelemetryJsonl } from "./telemetry-parser.js";
 export { TokenCostAnalyzer, ProposalGenerator, ApprovalManager, serializeProposal, parseProposal } from "./evolution/index.js";
 export type { EvolutionConfig, AnalyzerConfig, AnalysisResult, GroupKey, GroupStats, Outlier, Proposal, ProposalMeta, ProposalStatus, ProposalImpact, ProposalTarget, AnalysisLogEntry, ConfirmApplyFn, ApprovalResult } from "./evolution/index.js";
+// SPEC-015: 打包框架
+export { loadRecipe, resolveConfig, executeTarget, interpolateCommand, orchestratePackaging } from "./packaging/index.js";
+export type { PackagingTarget, PackagingConfig, Recipe, RecipeStep, PackagingResult, OrchestrateOptions } from "./packaging/index.js";
