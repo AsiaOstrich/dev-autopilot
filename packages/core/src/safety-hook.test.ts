@@ -73,20 +73,20 @@ describe("createDefaultSafetyHook", () => {
   };
 
   it("應允許安全的 task", () => {
-    expect(hook(safeTask)).toBe(true);
+    expect(hook(safeTask)).toBe("allow");
   });
 
   it("應攔截 spec 中的危險指令", () => {
-    expect(hook(dangerousSpecTask)).toBe(false);
+    expect(hook(dangerousSpecTask)).toBe("deny");
   });
 
   it("應攔截 verify_command 中的危險指令", () => {
-    expect(hook(dangerousVerifyTask)).toBe(false);
+    expect(hook(dangerousVerifyTask)).toBe("deny");
   });
 
   it("無 verify_command 的安全 task 應通過", () => {
     const task: Task = { id: "T-004", title: "Simple", spec: "Write a test" };
-    expect(hook(task)).toBe(true);
+    expect(hook(task)).toBe("allow");
   });
 });
 

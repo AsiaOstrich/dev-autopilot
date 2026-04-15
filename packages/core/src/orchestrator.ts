@@ -11,6 +11,7 @@ import { resolvePlan } from "./plan-resolver.js";
 import { runFixLoop, type ExecuteResult } from "./fix-loop.js";
 import { runQualityGate, type ShellExecutor } from "./quality-gate.js";
 import { runDualStageJudge, shouldRunJudge } from "./judge.js";
+import { normalizeSecurityDecision } from "./safety-hook.js";
 import { WorktreeManager } from "./worktree-manager.js";
 import { HistoryWriter } from "./execution-history/writer.js";
 import { LocalStorageBackend, FileServerStorageBackend } from "./execution-history/storage-backend.js";
@@ -775,6 +776,9 @@ async function executeTaskWithQuality(
 /**
  * 執行所有 safety hooks
  *
+ * 支援三態 SecurityDecision（XSPEC-037）和向後相容的布林值。
+ * DevAP 為 CI 環境，"ask" 等同 "deny"（無法互動確認）。
+ *
  * @returns 攔截原因（null 表示通過）
  */
 async function runSafetyHooks(
@@ -782,9 +786,14 @@ async function runSafetyHooks(
   hooks: SafetyHook[],
 ): Promise<string | null> {
   for (const hook of hooks) {
-    const allowed = await hook(task);
-    if (!allowed) {
-      return `Task ${task.id} 被 safety hook 拒絕`;
+    const raw = await hook(task);
+    const decision = normalizeSecurityDecision(raw);
+    // deny > ask > allow 鐵律；ask 在 CI 模式下等同 deny
+    if (decision === "deny" || decision === "ask") {
+      const reason = decision === "ask"
+        ? `Task ${task.id} 需使用者確認（CI 模式下視為 deny）`
+        : `Task ${task.id} 被 safety hook 拒絕`;
+      return reason;
     }
   }
   return null;

@@ -7,7 +7,7 @@
  * 祕密掃描：偵測硬編碼的 AWS key、API token、密碼等敏感資訊。
  */
 
-import type { Task, SafetyHook } from "./types.js";
+import type { Task, SafetyHook, SecurityDecision } from "./types.js";
 
 /**
  * 危險指令模式清單
@@ -107,26 +107,44 @@ export function detectHardcodedSecrets(text: string): string[] {
  * 建立預設的 safety hook
  *
  * 檢查 task 的 spec 和 verify_command 是否包含危險指令。
- * 回傳 true 表示安全，false 表示被攔截。
+ *
+ * 回傳 SecurityDecision（XSPEC-037 三態語義）：
+ * - "deny": 偵測到危險指令，立即拒絕
+ * - "allow": 通過安全檢查，允許執行
+ *
+ * （"ask" 模式保留給未來互動式確認場景）
  *
  * @returns SafetyHook 函式
  */
 export function createDefaultSafetyHook(): SafetyHook {
-  return (task: Task): boolean => {
+  return (task: Task): SecurityDecision => {
     // 檢查 spec
     const specDanger = detectDangerousCommand(task.spec);
     if (specDanger) {
-      return false;
+      return "deny";
     }
 
     // 檢查 verify_command
     if (task.verify_command) {
       const verifyDanger = detectDangerousCommand(task.verify_command);
       if (verifyDanger) {
-        return false;
+        return "deny";
       }
     }
 
-    return true;
+    return "allow";
   };
+}
+
+/**
+ * 將 SafetyHook 回傳值正規化為 SecurityDecision
+ *
+ * 向後相容：布林值 true = "allow"，false = "deny"。
+ * DevAP 為 CI/無人值守環境，"ask" 等同 "deny"。
+ */
+export function normalizeSecurityDecision(value: SecurityDecision | boolean): SecurityDecision {
+  if (typeof value === "boolean") {
+    return value ? "allow" : "deny";
+  }
+  return value;
 }

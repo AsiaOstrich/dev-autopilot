@@ -35,6 +35,15 @@ export interface JudgeResult {
   verdict: JudgeVerdict;
   /** 理由說明 */
   reasoning: string;
+  /**
+   * 判決信心度（XSPEC-035 雙階段輸出標準）
+   *
+   * 從 <summary> 區塊提取，反映 Judge 對判決的把握程度。
+   * - high: 證據充分，判決確定
+   * - medium: 有一定根據，但存在不確定性
+   * - low: 資訊不足，建議人工複查
+   */
+  confidence?: "high" | "medium" | "low";
   /** 審查階段（借鑑 Superpowers 雙階段審查） */
   review_stage?: JudgeReviewStage;
   /** Judge session ID */
@@ -326,10 +335,24 @@ ${stageGuidance}
 
 請仔細審查以上資訊，判斷任務是否正確完成。
 
-回覆必須是以下 JSON 格式（且只包含此 JSON，不要其他文字）：
-\`\`\`json
-${jsonFormat}
-\`\`\`
+**重要：你必須使用雙階段輸出格式（XSPEC-035）**
+
+<analysis>
+（在此進行你的思考過程 — 此區塊事後會被丟棄，不影響上下文 token 預算）
+- 分析 git diff 的變更內容
+- 比對規格要求與實際實作
+- 評估邊界情況與潛在問題
+${hasCriteria ? "- 逐條對照驗收條件（詳見下方）" : ""}
+</analysis>
+
+<summary>
+verdict: APPROVE 或 REJECT
+confidence: high 或 medium 或 low
+reasoning: 你的判決理由（一段話）
+${hasCriteria ? `criteria_results:\n  - criteria: "條件原文"\n    passed: true 或 false\n    reasoning: "判定理由"` : ""}${hasIntent ? `\nintent_assessment: 使用者意圖達成度評估` : ""}
+</summary>
+
+（只輸出上述雙階段 XML 格式，不要在外部加任何 JSON 或額外文字）
 
 判斷標準：
 ${judgingCriteria.join("\n")}`;
@@ -441,10 +464,85 @@ function tryParseJudgeJson(text: string): Record<string, unknown> | null {
 }
 
 /**
+ * 從雙階段輸出中提取 <summary> 區塊內容（XSPEC-035）
+ *
+ * 策略：
+ * 1. 提取 <summary>...</summary> 區塊（丟棄 <analysis> 區塊）
+ * 2. 若無 <summary> 標籤，回傳原始文字（降級相容）並記錄警告
+ */
+function extractSummaryBlock(text: string): { content: string; hasDualPhase: boolean } {
+  const summaryMatch = text.match(/<summary>([\s\S]*?)<\/summary>/i);
+  if (summaryMatch) {
+    return { content: summaryMatch[1].trim(), hasDualPhase: true };
+  }
+  // 降級：無 <summary> 標籤時，使用完整回應
+  console.warn("[WARN] dual-phase format missing in Judge output, fallback to full response (DPO-001)");
+  return { content: text, hasDualPhase: false };
+}
+
+/**
+ * 從 summary 文字中解析 verdict、confidence、reasoning
+ *
+ * 支援兩種格式：
+ * 1. 雙階段 YAML 格式（verdict: APPROVE\nconfidence: high\nreasoning: ...）
+ * 2. 舊式 JSON 格式（向後相容）
+ */
+function parseSummaryText(summary: string): {
+  verdict: JudgeVerdict;
+  confidence?: "high" | "medium" | "low";
+  reasoning: string;
+  criteria_results?: CriteriaResult[];
+  intent_assessment?: string;
+} | null {
+  // 嘗試 YAML-like 格式解析（雙階段輸出）
+  const verdictMatch = summary.match(/verdict:\s*(APPROVE|REJECT)/i);
+  const confidenceMatch = summary.match(/confidence:\s*(high|medium|low)/i);
+  const reasoningMatch = summary.match(/reasoning:\s*(.+?)(?=\n\w+:|$)/is);
+
+  if (verdictMatch) {
+    const result: ReturnType<typeof parseSummaryText> = {
+      verdict: verdictMatch[1].toUpperCase() === "REJECT" ? "REJECT" : "APPROVE",
+      reasoning: reasoningMatch?.[1]?.trim() ?? summary,
+    };
+    if (confidenceMatch) {
+      result.confidence = confidenceMatch[1].toLowerCase() as "high" | "medium" | "low";
+    }
+    return result;
+  }
+
+  // 嘗試 JSON 格式（向後相容）
+  const jsonParsed = tryParseJudgeJson(summary);
+  if (jsonParsed) {
+    const result: ReturnType<typeof parseSummaryText> = {
+      verdict: jsonParsed.verdict === "REJECT" ? "REJECT" : "APPROVE",
+      reasoning: String(jsonParsed.reasoning ?? ""),
+    };
+    if (typeof jsonParsed.confidence === "string") {
+      result.confidence = jsonParsed.confidence as "high" | "medium" | "low";
+    }
+    if (Array.isArray(jsonParsed.criteria_results)) {
+      result.criteria_results = jsonParsed.criteria_results.map(
+        (cr: { criteria?: string; passed?: boolean; reasoning?: string }) => ({
+          criteria: cr.criteria ?? "",
+          passed: cr.passed ?? false,
+          reasoning: cr.reasoning ?? "",
+        }),
+      );
+    }
+    if (typeof jsonParsed.intent_assessment === "string") {
+      result.intent_assessment = jsonParsed.intent_assessment;
+    }
+    return result;
+  }
+
+  return null;
+}
+
+/**
  * 解析 Judge 的 claude -p 輸出
  *
- * claude -p --output-format json 的 result 欄位包含 Judge 的回覆，
- * 其中應包含 JSON 格式的判決。
+ * 優先提取雙階段 <summary> 區塊（XSPEC-035），丟棄 <analysis>。
+ * 若無雙階段格式，降級相容舊式 JSON 判決。
  *
  * 若判決中包含 criteria_results 和 intent_assessment，一併解析。
  */
@@ -455,40 +553,28 @@ export function parseJudgeOutput(stdout: string): JudgeResult {
   const sessionId: string = cliOutput.session_id;
   const costUsd: number = cliOutput.cost_usd;
 
-  // 嘗試解析 Judge 回傳的 JSON 判決
-  const verdict = tryParseJudgeJson(resultText);
-  if (verdict) {
-    const result: JudgeResult = {
-      verdict: verdict.verdict === "REJECT" ? "REJECT" : "APPROVE",
-      reasoning: String(verdict.reasoning ?? ""),
+  // 步驟 1：提取 <summary> 區塊（丟棄 <analysis>）
+  const { content: summaryContent } = extractSummaryBlock(resultText);
+
+  // 步驟 2：解析 summary 內容
+  const parsed = parseSummaryText(summaryContent);
+  if (parsed) {
+    return {
+      verdict: parsed.verdict,
+      reasoning: parsed.reasoning,
+      confidence: parsed.confidence,
+      criteria_results: parsed.criteria_results,
+      intent_assessment: parsed.intent_assessment,
       session_id: sessionId,
       cost_usd: costUsd,
     };
-
-    // 解析 criteria_results（若存在）
-    if (Array.isArray(verdict.criteria_results)) {
-      result.criteria_results = verdict.criteria_results.map(
-        (cr: { criteria?: string; passed?: boolean; reasoning?: string }) => ({
-          criteria: cr.criteria ?? "",
-          passed: cr.passed ?? false,
-          reasoning: cr.reasoning ?? "",
-        }),
-      );
-    }
-
-    // 解析 intent_assessment（若存在）
-    if (typeof verdict.intent_assessment === "string") {
-      result.intent_assessment = verdict.intent_assessment;
-    }
-
-    return result;
   }
 
-  // 若無法提取 JSON，根據文字判斷
-  if (resultText.includes("REJECT")) {
+  // 步驟 3：降級 — 根據文字關鍵字判斷
+  if (summaryContent.includes("REJECT")) {
     return {
       verdict: "REJECT",
-      reasoning: resultText,
+      reasoning: summaryContent,
       session_id: sessionId,
       cost_usd: costUsd,
     };
@@ -496,7 +582,7 @@ export function parseJudgeOutput(stdout: string): JudgeResult {
 
   return {
     verdict: "APPROVE",
-    reasoning: resultText || "Judge 未提供明確判決，預設通過",
+    reasoning: summaryContent || "Judge 未提供明確判決，預設通過",
     session_id: sessionId,
     cost_usd: costUsd,
   };

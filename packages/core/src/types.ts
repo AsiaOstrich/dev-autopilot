@@ -460,15 +460,63 @@ export interface AgentAdapter {
    * @param sessionId - 要恢復的 session ID
    */
   resumeSession?(sessionId: string): Promise<void>;
+
+  /**
+   * 能力聲明（XSPEC-037 Fail-Closed 預設）
+   *
+   * 未提供時使用 FAIL_CLOSED_DEFAULTS（最保守設定）。
+   * 新增 Adapter 時建議明確聲明，避免被誤判為不安全。
+   */
+  capabilities?: Readonly<CapabilityDeclaration>;
 }
+
+/**
+ * 安全決策三態（XSPEC-037 / UDS security-decision 標準）
+ *
+ * deny > ask > allow 優先級鐵律：
+ * - deny: 立即阻止，任何來源的 deny 均優先
+ * - ask: 需使用者確認（CI 模式下等同 deny）
+ * - allow: 允許繼續執行
+ *
+ * 向後相容：SafetyHook 仍可回傳 boolean（true = allow, false = deny）
+ */
+export type SecurityDecision = "deny" | "ask" | "allow";
+
+/**
+ * 能力聲明（XSPEC-037 / UDS capability-declaration 標準）
+ *
+ * Fail-Closed 設計：未明確聲明的屬性預設為最保守值。
+ * 「忘記聲明」的結果是保守行為，而非危險行為。
+ */
+export interface CapabilityDeclaration {
+  /** 是否對並行執行安全（無競態、無共享可變狀態）。預設 false。 */
+  isConcurrencySafe: boolean;
+  /** 是否為純讀取操作（不修改任何持久化狀態）。預設 false。 */
+  isReadOnly: boolean;
+  /** 執行前是否需要使用者明確確認。預設 true。 */
+  requiresUserConfirmation: boolean;
+  /** 工具的信任等級，影響沙箱隔離強度。預設 "untrusted"。 */
+  trustLevel: "trusted" | "sandboxed" | "untrusted";
+}
+
+/** Fail-Closed 預設能力聲明 */
+export const FAIL_CLOSED_DEFAULTS: Readonly<CapabilityDeclaration> = {
+  isConcurrencySafe: false,
+  isReadOnly: false,
+  requiresUserConfirmation: true,
+  trustLevel: "untrusted",
+} as const;
 
 /**
  * Safety Hook 回呼函式類型
  *
  * 在任務執行前呼叫，用於攔截危險操作。
- * 回傳 true 表示允許，false 表示拒絕。
+ * 支援三態回傳（SecurityDecision）或向後相容的布林值：
+ * - "deny" / false: 拒絕執行
+ * - "ask": 需使用者確認（DevAP CI 模式下等同 deny）
+ * - "allow" / true: 允許執行
  */
-export type SafetyHook = (task: Task) => Promise<boolean> | boolean;
+export type SafetyHook = (task: Task) => Promise<SecurityDecision | boolean> | SecurityDecision | boolean;
 
 /**
  * 已解析的單一任務（含生成的 prompt）
@@ -633,7 +681,7 @@ export interface FixLoopResult {
   /** 總重試成本（美元） */
   total_retry_cost_usd: number;
   /** 停止原因 */
-  stop_reason: "passed" | "max_retries" | "budget_exceeded";
+  stop_reason: "passed" | "max_retries" | "budget_exceeded" | "circuit_open";
 }
 
 /** Checkpoint 策略 */
