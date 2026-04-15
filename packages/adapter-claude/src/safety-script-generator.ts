@@ -4,7 +4,11 @@
  * 將 safety-hook.ts 的危險指令模式轉換為可獨立執行的 PreToolUse hook shell 腳本。
  * 腳本從 stdin 讀取 JSON（Claude Code hook input），檢查 Bash 工具的 command 參數。
  *
- * 攔截時回傳 exit code 2（block），安全指令回傳 exit code 0（allow）。
+ * 退出碼三分類（ACP-006，借鑑 claude-code-book Ch.7）：
+ *   exit 0 = pass（允許執行）
+ *   exit 2 = block（阻止 + stderr 回饋注入 AI 上下文）
+ *   exit 1 = warn（軟性警告，記錄但繼續執行）
+ *
  * 不依賴 DevAP runtime，可直接 `sh -c` 執行。
  */
 
@@ -26,6 +30,18 @@ const DANGEROUS_REGEX_DESCRIPTIONS: ReadonlyArray<{ grepPattern: string; descrip
   { grepPattern: "curl.*\\|.*bash", description: "下載並執行腳本（curl|bash）" },
   { grepPattern: "wget.*\\|.*sh", description: "下載並執行腳本（wget|sh）" },
   { grepPattern: "wget.*\\|.*bash", description: "下載並執行腳本（wget|bash）" },
+];
+
+/**
+ * 軟性警告模式（exit 1）：非阻擋，記錄到系統日誌但繼續執行（ACP-006）。
+ * 適用於可能合法但需要注意的操作。
+ */
+const WARNING_STRING_PATTERNS: ReadonlyArray<{ pattern: string; description: string }> = [
+  { pattern: "sudo ", description: "使用 sudo 提權，請確認是否必要" },
+  { pattern: "curl -k ", description: "curl 跳過 TLS 驗證（不安全）" },
+  { pattern: "curl --insecure", description: "curl 跳過 TLS 驗證（不安全）" },
+  { pattern: "npm install -g", description: "全域 npm 安裝，可能污染系統環境" },
+  { pattern: "pip install", description: "系統層級 pip 安裝，建議使用 virtualenv" },
 ];
 
 /**
@@ -88,6 +104,16 @@ export function generatePreToolUseScript(): string {
     lines.push("");
   }
 
+  lines.push("# 軟性警告模式（exit 1）：記錄但不阻擋");
+  for (const { pattern, description } of WARNING_STRING_PATTERNS) {
+    const escaped = pattern.replace(/'/g, "'\\''");
+    lines.push(`# 警告：${description}`);
+    lines.push(`if echo "$CMD_LOWER" | grep -q '${escaped}'; then`);
+    lines.push(`  echo "DevAP Warning: 偵測到 ${escaped} (${description})，請確認此操作是否符合預期" >&2`);
+    lines.push("  exit 1");
+    lines.push("fi");
+  }
+  lines.push("");
   lines.push("# 所有檢查通過");
   lines.push("exit 0");
 

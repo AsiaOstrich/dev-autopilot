@@ -3,7 +3,9 @@
 - **Status**: Implemented
 - **Author**: AsiaOstrich
 - **Created**: 2026-04-01
+- **Updated**: 2026-04-15 (Phase 2: Exit Code 3-Class Semantics, Warning Patterns)
 - **Depends on**: SPEC-001 (Quality Gate), Issue #5 (PostToolUse Hook)
+- **Standards**: UDS `agent-communication-protocol.ai.yaml` ACP-006 (hook_exit_codes)
 
 ## Overview
 
@@ -174,7 +176,31 @@ exit 0
 - [ ] 既有 `harness-config.test.ts` 無 regression
 - [ ] 既有 `safety-hook.test.ts` 無 regression
 
+## Exit Code 三分類語義（Phase 2 / ACP-006）
+
+依據 UDS `agent-communication-protocol.ai.yaml` `hook_exit_codes` 標準（借鑑 claude-code-book Ch.7）：
+
+| Exit Code | 名稱 | 行為 | 適用場景 |
+|-----------|------|------|---------|
+| `0` | pass | 允許繼續執行，stdout/stderr 忽略 | 所有檢查通過 |
+| `2` | block | **阻止**工具執行；stderr 內容作為回饋注入 AI 上下文 | 危險指令、安全違規 |
+| `1`（其他非0） | warn | 非阻擋警告；記錄日誌但繼續執行 | deprecated pattern、潛在風險 |
+
+### 軟性警告模式（exit 1，Phase 2 新增）
+
+`WARNING_STRING_PATTERNS` 涵蓋以下場景，偵測後回傳 exit 1（不阻擋）：
+- `sudo ` — 使用提權指令
+- `curl -k` / `curl --insecure` — 跳過 TLS 驗證
+- `npm install -g` — 全域安裝
+- `pip install` — 系統層級 Python 安裝
+
+### Stop hook 注意
+
+Stop hook 使用 `exit 0 + stdout JSON（decision:block）` 要求 AI 繼續修復（非阻止 session）。
+若需強制中止 session，Stop hook 應回傳 `exit 2`。
+
 ## Risk
 
-- **[中]** PreToolUse hook 腳本需要 `jq` — 應提供 fallback（pure bash JSON 解析）
+- **[中]** PreToolUse hook 腳本需要 `jq` — 已提供 fallback（pure bash grep/sed 解析）
 - **[低]** Stop hook 的 verify_command 可能耗時長 — 需設定合理 timeout
+- **[低]** exit 1 警告不注入 AI 上下文，AI 不會主動感知 — 此為設計決策（避免 noise）
