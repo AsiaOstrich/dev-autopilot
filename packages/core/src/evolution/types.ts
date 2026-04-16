@@ -121,14 +121,47 @@ export interface Proposal {
   body: string;
 }
 
+// ─── Hook 效率分析（XSPEC-004 Phase 4.2）─────────────────────
+
+/** Hook 效率問題：pass_rate 低於閾值的 standard */
+export interface HookEfficiencyIssue {
+  standard_id: string;
+  /** 總執行次數 */
+  executions: number;
+  /** 通過率（0–1） */
+  pass_rate: number;
+  /** 失敗次數 */
+  fail_count: number;
+  /** 平均執行耗時（毫秒） */
+  avg_duration_ms: number;
+  /** 低於閾值的幅度（百分比，正數表示低於閾值） */
+  degradation_pct: number;
+}
+
+/** Hook 效率分析結果 */
+export interface HookEfficiencyAnalysisResult {
+  analyzer: "hook-efficiency";
+  timestamp: string;
+  config: AnalyzerConfig;
+  /** 掃描的 standard 總數 */
+  total_standards_scanned: number;
+  /** 掃描的總執行次數 */
+  total_executions: number;
+  /** 發現的效率問題（pass_rate 低於閾值），按 pass_rate 升序 */
+  issues: HookEfficiencyIssue[];
+  skipped: boolean;
+  skip_reason?: "insufficient_samples" | "no_telemetry_data";
+  confidence?: "low" | "high";
+}
+
 // ─── 分析日誌 ───────────────────────────────────────────────
 
 /** analysis-log.jsonl 單行 */
 export interface AnalysisLogEntry {
   timestamp: string;
-  analyzer: "token-cost";
+  analyzer: "token-cost" | "hook-efficiency";
   status: "completed" | "skipped";
-  skip_reason?: "insufficient_samples";
+  skip_reason?: "insufficient_samples" | "no_telemetry_data";
   total_tasks_scanned: number;
   outliers_found: number;
   proposals_generated: number;
