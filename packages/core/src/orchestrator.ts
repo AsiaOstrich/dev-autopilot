@@ -835,15 +835,19 @@ async function executeTaskSimple(
 
   // Worktree 隔離：為 task 建立獨立 worktree
   let taskCwd = options.cwd;
+  // DEC-039-H1: 分段計時 — worktree 建立
+  const worktreeStartMs = Date.now();
   if (worktreeManager) {
     try {
       const wtInfo = await worktreeManager.create(task.id);
       taskCwd = wtInfo.path;
-      options.onProgress?.(`[${task.id}] 已建立 worktree: ${wtInfo.path}`);
+      const worktreeMs = Date.now() - worktreeStartMs;
+      options.onProgress?.(`[${task.id}] 已建立 worktree: ${wtInfo.path} (${worktreeMs}ms)`);
     } catch (error) {
       options.onProgress?.(`[${task.id}] 建立 worktree 失敗，使用原始目錄: ${error instanceof Error ? error.message : error}`);
     }
   }
+  const worktreeMs = Date.now() - worktreeStartMs;
 
   try {
     // XSPEC-050: 從 resumeFrom 取 sessionId（優先於全域 sessionId）
@@ -861,6 +865,9 @@ async function executeTaskSimple(
 
     let result: TaskResult;
 
+    // DEC-039-H1: 分段計時 — API 呼叫（不含 worktree）
+    const apiStartMs = Date.now();
+
     // XSPEC-042：串流模式分支
     if (options.streamOutput && adapter.executeTaskStream) {
       const gen = adapter.executeTaskStream(task, execOpts);
@@ -875,6 +882,14 @@ async function executeTaskSimple(
       result = next.value;
     } else {
       result = await adapter.executeTask(task, execOpts);
+    }
+
+    const apiMs = Date.now() - apiStartMs;
+    const totalMs = Date.now() - taskStartTime;
+    if (worktreeManager) {
+      options.onProgress?.(
+        `[${task.id}] timing: worktree=${worktreeMs}ms api=${apiMs}ms total=${totalMs}ms worktree_ratio=${Math.round((worktreeMs / totalMs) * 100)}%`,
+      );
     }
 
     result = { ...result, duration_ms: result.duration_ms ?? Date.now() - taskStartTime };
