@@ -1323,3 +1323,99 @@ describe("orchestrate — streamOutput 串流模式（XSPEC-042）", () => {
     expect(executeTaskMock).toHaveBeenCalledOnce();
   });
 });
+
+describe("XSPEC-048: Orchestrator AbortSignal 取消機制", () => {
+  const twolayerPlan: TaskPlan = {
+    project: "abort-test",
+    tasks: [
+      { id: "T-001", title: "Layer 1", spec: "L1" },
+      { id: "T-002", title: "Layer 2", spec: "L2", depends_on: ["T-001"] },
+      { id: "T-003", title: "Layer 3", spec: "L3", depends_on: ["T-002"] },
+    ],
+  };
+
+  it("AC-5: signal 在 Layer 1 執行前 abort → 所有 Task 為 cancelled", async () => {
+    const controller = new AbortController();
+    controller.abort("user_cancel");
+
+    const executeTaskMock = vi.fn(async (task: Task): Promise<TaskResult> => ({
+      task_id: task.id, status: "success", duration_ms: 10,
+    }));
+    const adapter = createMockAdapter({ executeTask: executeTaskMock });
+
+    const report = await orchestrate(twolayerPlan, adapter, {
+      cwd: "/tmp/test",
+      signal: controller.signal,
+    });
+
+    // 所有 Task 都應為 cancelled
+    for (const r of report.tasks) {
+      expect(r.status).toBe("cancelled");
+      expect(r.cancellation_reason).toBe("user_cancel");
+    }
+    expect(report.summary.cancelled).toBe(3);
+    expect(executeTaskMock).not.toHaveBeenCalled();
+  });
+
+  it("AC-5（層間）: Layer 1 完成後 abort → Layer 1 保留結果，Layer 2/3 為 cancelled", async () => {
+    const controller = new AbortController();
+
+    let callCount = 0;
+    const executeTaskMock = vi.fn(async (task: Task): Promise<TaskResult> => {
+      callCount++;
+      // T-001 執行完後 abort
+      if (task.id === "T-001") {
+        controller.abort("after-layer1");
+      }
+      return { task_id: task.id, status: "success", duration_ms: 10 };
+    });
+    const adapter = createMockAdapter({ executeTask: executeTaskMock });
+
+    const report = await orchestrate(twolayerPlan, adapter, {
+      cwd: "/tmp/test",
+      signal: controller.signal,
+    });
+
+    const t1 = report.tasks.find(r => r.task_id === "T-001");
+    const t2 = report.tasks.find(r => r.task_id === "T-002");
+    const t3 = report.tasks.find(r => r.task_id === "T-003");
+
+    // T-001 已完成，保留 success 結果
+    expect(t1?.status).toBe("success");
+    // T-002 / T-003 未執行，為 cancelled
+    expect(t2?.status).toBe("cancelled");
+    expect(t3?.status).toBe("cancelled");
+    expect(report.summary.succeeded).toBe(1);
+    expect(report.summary.cancelled).toBe(2);
+    // adapter 只被呼叫 1 次（T-001）
+    expect(callCount).toBe(1);
+  });
+
+  it("AC-5: cancelled status 不出現在 failed 計數中", async () => {
+    const controller = new AbortController();
+    controller.abort("test_cancel");
+
+    const adapter = createMockAdapter();
+
+    const report = await orchestrate(twolayerPlan, adapter, {
+      cwd: "/tmp/test",
+      signal: controller.signal,
+    });
+
+    expect(report.summary.failed).toBe(0);
+    expect(report.summary.cancelled).toBe(3);
+  });
+
+  it("AC-8: 無 signal 時現有行為不變（向後相容）", async () => {
+    const executeTaskMock = vi.fn(async (task: Task): Promise<TaskResult> => ({
+      task_id: task.id, status: "success", duration_ms: 10,
+    }));
+    const adapter = createMockAdapter({ executeTask: executeTaskMock });
+
+    const report = await orchestrate(twolayerPlan, adapter, { cwd: "/tmp/test" });
+
+    expect(report.summary.succeeded).toBe(3);
+    expect(report.summary.cancelled).toBe(0);
+    expect(executeTaskMock).toHaveBeenCalledTimes(3);
+  });
+});

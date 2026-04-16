@@ -300,6 +300,21 @@ async function orchestrateSequential(
   let totalCostAccum = 0;
 
   for (let i = 0; i < sortedTasks.length; i++) {
+    // XSPEC-048: Task 執行前檢查 AbortSignal
+    if (options.signal?.aborted) {
+      const cancelReason = String(options.signal.reason ?? "orchestrator-abort");
+      options.onProgress?.(`⚠️ 已取消（${cancelReason}），停止後續 ${sortedTasks.length - i} 個 Task`);
+      for (let j = i; j < sortedTasks.length; j++) {
+        results.push({
+          task_id: sortedTasks[j].id,
+          status: "cancelled",
+          cancellation_reason: cancelReason,
+          duration_ms: 0,
+        });
+      }
+      break;
+    }
+
     // Plan 層級預算檢查（SPEC-005 AC-005-003）
     if (plan.max_total_budget_usd && totalCostAccum >= plan.max_total_budget_usd) {
       options.onProgress?.(`⚠️ 總成本 $${totalCostAccum.toFixed(2)} 已達上限 $${plan.max_total_budget_usd}，停止執行`);
@@ -387,6 +402,24 @@ async function orchestrateParallel(
   let forkBaseSessionId: string | undefined;
 
   for (let layerIdx = 0; layerIdx < layers.length; layerIdx++) {
+    // XSPEC-048: Layer 邊界 AbortSignal 檢查
+    // 在每層開始前確認是否已取消，若已取消則將後續所有 Task 標記為 cancelled
+    if (options.signal?.aborted) {
+      const cancelReason = String(options.signal.reason ?? "orchestrator-abort");
+      options.onProgress?.(`⚠️ 已取消（${cancelReason}），停止後續 ${layers.length - layerIdx} 層`);
+      for (let j = layerIdx; j < layers.length; j++) {
+        for (const t of layers[j]) {
+          results.push({
+            task_id: t.id,
+            status: "cancelled",
+            cancellation_reason: cancelReason,
+            duration_ms: 0,
+          });
+        }
+      }
+      break;
+    }
+
     // Plan 層級預算檢查（SPEC-005 AC-005-003）
     if (plan.max_total_budget_usd && totalCostAccum >= plan.max_total_budget_usd) {
       options.onProgress?.(`⚠️ 總成本 $${totalCostAccum.toFixed(2)} 已達上限 $${plan.max_total_budget_usd}，停止執行`);
@@ -640,6 +673,8 @@ async function executeTaskSimple(
       forkSession: forkSession ?? task.fork_session,
       onProgress: options.onProgress,
       modelTier: task.model_tier,
+      // XSPEC-048: 傳播取消訊號
+      signal: options.signal,
     };
 
     let result: TaskResult;
@@ -714,7 +749,9 @@ async function executeTaskWithQuality(
 
   let lastFailureSource: import("./types.js").FailureSource | undefined = undefined;
 
-  const fixLoopResult = await runFixLoop(
+  let fixLoopResult;
+  try {
+   fixLoopResult = await runFixLoop(
     { max_retries: qc.max_retries, max_retry_budget_usd: qc.max_retry_budget_usd },
     {
       execute: async (feedback, attempt): Promise<ExecuteResult> => {
@@ -733,6 +770,8 @@ async function executeTaskWithQuality(
             forkSession: forkSession ?? task.fork_session,
             onProgress: options.onProgress,
             modelTier: task.model_tier,
+            // XSPEC-048: 傳播取消訊號
+            signal: options.signal,
           };
           taskResult = await adapter.executeTask(taskWithFeedback, execOpts);
         } catch (error) {
@@ -741,6 +780,11 @@ async function executeTaskWithQuality(
             cost_usd: 0,
             feedback: `執行錯誤：${error instanceof Error ? error.message : String(error)}`,
           };
+        }
+
+        // XSPEC-048: cancelled 狀態直接透過拋出例外強制中斷 fix loop（不觸發重試）
+        if (taskResult.status === "cancelled") {
+          throw Object.assign(new Error("task-cancelled"), { taskResult });
         }
 
         // 處理新的 Implementer 狀態（借鑑 Superpowers）
@@ -811,6 +855,14 @@ async function executeTaskWithQuality(
       onProgress: options.onProgress,
     },
   );
+  } catch (err) {
+    // XSPEC-048: cancelled 例外直接回傳 cancelled TaskResult（不觸發重試）
+    const e = err as { message?: string; taskResult?: TaskResult };
+    if (e.message === "task-cancelled" && e.taskResult) {
+      return e.taskResult as TaskResult;
+    }
+    throw err;
+  }
 
   const duration = Date.now() - taskStartTime;
   const retryCount = fixLoopResult.attempts.length - 1;
@@ -1020,6 +1072,7 @@ function buildSummary(results: TaskResult[], totalDuration: number): ExecutionSu
     done_with_concerns: 0,
     needs_context: 0,
     blocked: 0,
+    cancelled: 0,   // XSPEC-048
   };
 
   let totalCost = 0;
@@ -1036,6 +1089,7 @@ function buildSummary(results: TaskResult[], totalDuration: number): ExecutionSu
     done_with_concerns: statusCounts.done_with_concerns,
     needs_context: statusCounts.needs_context,
     blocked: statusCounts.blocked,
+    cancelled: statusCounts.cancelled,   // XSPEC-048
     total_cost_usd: totalCost,
     total_duration_ms: totalDuration,
   };

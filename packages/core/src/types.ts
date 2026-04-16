@@ -155,7 +155,8 @@ export type TaskStatus =
   | "timeout"            // 逾時
   | "done_with_concerns" // 完成但有疑慮（借鑑 Superpowers DONE_WITH_CONCERNS）
   | "needs_context"      // 需要更多上下文（借鑑 Superpowers NEEDS_CONTEXT）
-  | "blocked";           // 無法完成，需升級處理（借鑑 Superpowers BLOCKED）
+  | "blocked"            // 無法完成，需升級處理（借鑑 Superpowers BLOCKED）
+  | "cancelled";         // 被 AbortSignal 取消（XSPEC-048）
 
 /**
  * 單一任務定義
@@ -294,6 +295,8 @@ export interface TaskResult {
   readonly verification_evidence?: ReadonlyArray<VerificationEvidence>;
   /** 執行度量（供 activationPredicate threshold 類型讀取，DEC-011） */
   readonly metrics?: Record<string, number>;
+  /** 取消原因（status 為 cancelled 時，對應 AbortSignal.reason，XSPEC-048） */
+  readonly cancellation_reason?: string;
 }
 
 /**
@@ -312,6 +315,18 @@ export interface ExecuteOptions {
   readonly modelTier?: ModelTier;
   /** 品質設定（由 Orchestrator 傳入，adapter 用於生成 hooks） */
   readonly qualityConfig?: QualityConfig;
+  /**
+   * 取消訊號（XSPEC-048）
+   *
+   * 傳入 Web 標準 AbortSignal，adapter 在執行前/中若偵測到 abort 則立即
+   * 停止執行並回傳 { status: "cancelled", cancellation_reason }。
+   *
+   * 使用範例：
+   *   const ctrl = new AbortController()
+   *   setTimeout(() => ctrl.abort("timeout_30s"), 30_000)
+   *   adapter.executeTask(task, { ...opts, signal: ctrl.signal })
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -332,6 +347,8 @@ export interface ExecutionSummary {
   needs_context: number;
   /** 被阻塞數 */
   blocked: number;
+  /** 被取消數（XSPEC-048） */
+  cancelled: number;
   /** 總成本（美元） */
   total_cost_usd: number;
   /** 總耗時（毫秒） */
@@ -860,6 +877,16 @@ export interface OrchestratorOptions {
   readonly branchDriftBlockThreshold?: number;
   /** 基底分支名稱（XSPEC-047，預設 "main"） */
   readonly branchDriftBaseBranch?: string;
+  /**
+   * 取消訊號（XSPEC-048）
+   *
+   * Orchestrator 在每個 Layer 邊界檢查 signal.aborted：
+   * - 若已 abort，將所有未開始 Task 標記為 "cancelled"，並傳播 signal 給進行中 Task
+   * - cancelled Task 不觸發重試，也不消耗 max_retries 配額
+   *
+   * 可用 AbortSignal.any([signal1, signal2]) 合併多個取消來源（用戶 + 逾時）。
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**

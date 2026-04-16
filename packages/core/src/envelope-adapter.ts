@@ -52,6 +52,7 @@ const DEVAP_TO_UNIFIED: Record<TaskStatus, UnifiedStatus> = {
   done_with_concerns: "success_partial",
   needs_context: "needs_context",
   blocked: "blocked",
+  cancelled: "skipped",   // cancelled 對應 unified "skipped"（未完成但非失敗，XSPEC-048）
 };
 
 const UNIFIED_TO_DEVAP: Record<UnifiedStatus, TaskStatus> = {

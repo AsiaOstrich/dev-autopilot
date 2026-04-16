@@ -50,6 +50,16 @@ export class ClaudeAdapter implements AgentAdapter {
   async executeTask(task: Task, options: ExecuteOptions): Promise<TaskResult> {
     const startTime = Date.now();
 
+    // XSPEC-048: 執行前快速檢查（pre-abort）
+    if (options.signal?.aborted) {
+      return {
+        task_id: task.id,
+        status: "cancelled",
+        cancellation_reason: String(options.signal.reason ?? "pre-abort"),
+        duration_ms: 0,
+      };
+    }
+
     // Phase 1: 注入 hooks 配置（SPEC-009）
     const hooksWritten = await this.injectHarnessHooks(task, options);
 
@@ -63,6 +73,17 @@ export class ClaudeAdapter implements AgentAdapter {
       const stream = query({ prompt, options: sdkOptions });
 
       for await (const message of stream) {
+        // XSPEC-048: 迭代中途檢查 signal
+        if (options.signal?.aborted) {
+          return {
+            task_id: task.id,
+            session_id: sessionId,
+            status: "cancelled",
+            cancellation_reason: String(options.signal.reason ?? "mid-stream-abort"),
+            duration_ms: Date.now() - startTime,
+          };
+        }
+
         // 提取 session_id（init 訊息）
         if (message.type === "system" && message.subtype === "init") {
           sessionId = (message as SDKSystemMessage).session_id;
@@ -77,6 +98,18 @@ export class ClaudeAdapter implements AgentAdapter {
 
       return this.buildResult(task, sessionId, resultMessage, startTime);
     } catch (error) {
+      // XSPEC-048: AbortError → cancelled TaskResult（不拋出 UnhandledPromiseRejection）
+      if (error instanceof Error && error.name === "AbortError") {
+        return {
+          task_id: task.id,
+          session_id: sessionId,
+          status: "cancelled",
+          cancellation_reason: options.signal?.reason !== undefined
+            ? String(options.signal.reason)
+            : "abort-error",
+          duration_ms: Date.now() - startTime,
+        };
+      }
       return {
         task_id: task.id,
         session_id: sessionId,
@@ -300,7 +333,22 @@ export class ClaudeAdapter implements AgentAdapter {
 
     // 工具限制
     if (task.allowed_tools) {
-      sdkOptions.allowedTools = task.allowed_tools;
+      sdkOptions.allowedTools = [...task.allowed_tools];
+    }
+
+    // XSPEC-048: 將 AbortSignal 橋接至 SDK 的 abortController
+    // SDK 接受 AbortController，但我們對外暴露 AbortSignal（更標準的 API）
+    // 使用 proxy AbortController 橋接：當 signal abort 時，觸發 controller.abort()
+    if (options.signal) {
+      const controller = new AbortController();
+      if (options.signal.aborted) {
+        controller.abort(options.signal.reason);
+      } else {
+        options.signal.addEventListener("abort", () => {
+          controller.abort(options.signal!.reason);
+        }, { once: true });
+      }
+      sdkOptions.abortController = controller;
     }
 
     return sdkOptions;

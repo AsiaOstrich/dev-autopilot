@@ -226,3 +226,125 @@ describe("ClaudeAdapter", () => {
     expect(callArg.prompt).toContain("驗收條件");
   });
 });
+
+describe("XSPEC-048: AbortSignal 取消機制", () => {
+  let adapter: InstanceType<typeof ClaudeAdapter>;
+
+  beforeEach(() => {
+    adapter = new ClaudeAdapter();
+    mockQuery.mockReset();
+  });
+
+  it("AC-1: 執行前 signal 已 aborted → 立即回傳 cancelled（不呼叫 SDK）", async () => {
+    const controller = new AbortController();
+    controller.abort("user_cancel");
+
+    const result = await adapter.executeTask(baseTask, {
+      ...baseOptions,
+      signal: controller.signal,
+    });
+
+    expect(result.status).toBe("cancelled");
+    expect(result.cancellation_reason).toBe("user_cancel");
+    expect(result.duration_ms).toBe(0);
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it("AC-2: 執行前 signal 已 aborted（無 reason）→ 回傳 cancelled 且 cancellation_reason 非空", async () => {
+    const controller = new AbortController();
+    controller.abort();  // 無 reason → Node.js 填入 DOMException
+
+    const result = await adapter.executeTask(baseTask, {
+      ...baseOptions,
+      signal: controller.signal,
+    });
+
+    expect(result.status).toBe("cancelled");
+    expect(result.duration_ms).toBe(0);
+    expect(result.cancellation_reason).toBeTruthy();  // DOMException string
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it("AC-3: 執行中途 signal abort → 回傳 cancelled TaskResult（不拋出）", async () => {
+    const controller = new AbortController();
+
+    // stream 開始後觸發 abort
+    let abortCalled = false;
+    mockQuery.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        yield { type: "system", subtype: "init", session_id: "sess-cancel" };
+        if (!abortCalled) {
+          controller.abort("mid-stream");
+          abortCalled = true;
+        }
+        // 繼續 yield，讓 for-await 中途檢查到 aborted
+        yield { type: "result", subtype: "success", session_id: "sess-cancel", total_cost_usd: 0.01, duration_ms: 50 };
+      },
+    });
+
+    const result = await adapter.executeTask(baseTask, {
+      ...baseOptions,
+      signal: controller.signal,
+    });
+
+    expect(result.status).toBe("cancelled");
+    expect(result.session_id).toBe("sess-cancel");
+  });
+
+  it("AC-4: AbortError 被 SDK 拋出 → catch 轉為 cancelled TaskResult", async () => {
+    const controller = new AbortController();
+    controller.abort("abort-from-sdk");
+
+    const abortError = new Error("The operation was aborted");
+    abortError.name = "AbortError";
+    mockQuery.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        throw abortError;
+      },
+    });
+
+    const result = await adapter.executeTask(baseTask, {
+      ...baseOptions,
+      signal: controller.signal,
+    });
+
+    expect(result.status).toBe("cancelled");
+    expect(result.cancellation_reason).toContain("abort");
+  });
+
+  it("AC-5: 無 signal 時行為與舊版相同（向後相容）", async () => {
+    mockQuery.mockReturnValue(
+      {
+        async *[Symbol.asyncIterator]() {
+          yield { type: "system", subtype: "init", session_id: "sess-no-signal" };
+          yield { type: "result", subtype: "success", session_id: "sess-no-signal", total_cost_usd: 0.01, duration_ms: 50 };
+        },
+      },
+    );
+
+    const result = await adapter.executeTask(baseTask, baseOptions);
+
+    expect(result.status).toBe("success");
+    expect(mockQuery).toHaveBeenCalledOnce();
+  });
+
+  it("AC-6: buildOptions 應在 signal 存在時建立 abortController 傳入 SDK", async () => {
+    const controller = new AbortController();
+
+    mockQuery.mockReturnValue(
+      {
+        async *[Symbol.asyncIterator]() {
+          yield { type: "result", subtype: "success", total_cost_usd: 0, duration_ms: 10 };
+        },
+      },
+    );
+
+    await adapter.executeTask(baseTask, {
+      ...baseOptions,
+      signal: controller.signal,
+    });
+
+    const sdkCallOptions = (mockQuery.mock.calls[0][0] as { options: { abortController?: AbortController } }).options;
+    expect(sdkCallOptions.abortController).toBeInstanceOf(AbortController);
+  });
+});
