@@ -8,7 +8,9 @@
  * 純邏輯、透過回呼函式與外部互動。
  */
 
-import type { FixFeedback, FixLoopAttempt, FixLoopConfig, FixLoopResult } from "./types.js";
+import { createHash } from "node:crypto";
+import type { FailureSource, FixFeedback, FixLoopAttempt, FixLoopConfig, FixLoopResult } from "./types.js";
+import type { JudgeResult } from "./judge.js";
 
 /**
  * 單次執行函式的回傳值
@@ -22,6 +24,20 @@ export interface ExecuteResult {
   feedback?: string;
   /** 結構化除錯回饋（借鑑 Superpowers 四階段除錯法） */
   structured_feedback?: FixFeedback;
+  /**
+   * Judge 審查結果（XSPEC-061）
+   *
+   * 提供後，fix_loop 可從中計算 error_fingerprint 進行收斂偵測。
+   * 若未提供，跳過指紋偵測（向後相容）。
+   */
+  judge_result?: JudgeResult;
+  /**
+   * 失敗來源分類（XSPEC-061）
+   *
+   * 提供後，fix_loop 使用 max_retries_by_source 查詢對應上限。
+   * 若未提供，使用全域 max_retries。
+   */
+  failureSource?: FailureSource;
 }
 
 /**
@@ -41,6 +57,15 @@ export interface FixLoopCallbacks {
    * @param message - 進度訊息
    */
   onProgress?: (message: string) => void;
+
+  /**
+   * 取得當前的 failureSource（XSPEC-061，可選）
+   *
+   * 若 execute() 未在 ExecuteResult 中回傳 failureSource，
+   * 可透過此 callback 取得（用於動態重試上限查詢）。
+   * 未提供時 failureSource=undefined，使用全域 max_retries。
+   */
+  getFailureSource?: () => FailureSource | undefined;
 }
 
 /**
@@ -66,8 +91,14 @@ export async function runFixLoop(
   let consecutiveFailures = 0;
   const previousHypotheses: Array<{ hypothesis: string; result: string }> = [];
 
-  // 首次執行 + 重試（最多 1 + max_retries 次）
-  const maxAttempts = 1 + config.max_retries;
+  // XSPEC-061：指紋歷史記錄
+  const fingerprintHistory: string[] = [];
+  const fingerprintThreshold = config.stop_on_fingerprint_repeat ?? 2;
+
+  // 首次執行時不確定 failureSource，先用全域 max_retries 決定上限
+  // 首次失敗後更新 failureSource，下次迭代使用動態上限
+  let currentMaxRetries = config.max_retries;
+  let maxAttempts = 1 + currentMaxRetries;
 
   for (let i = 1; i <= maxAttempts; i++) {
     const isRetry = i > 1;
@@ -86,7 +117,7 @@ export async function runFixLoop(
         };
       }
 
-      callbacks.onProgress?.(`第 ${i} 次嘗試（重試 ${i - 1}/${config.max_retries}）`);
+      callbacks.onProgress?.(`第 ${i} 次嘗試（重試 ${i - 1}/${currentMaxRetries}）`);
 
       // 借鑑 Superpowers 四階段除錯法：構建結構化回饋
       lastFeedback = buildStructuredFeedback(
@@ -121,6 +152,35 @@ export async function runFixLoop(
       totalRetryCost += result.cost_usd;
     }
 
+    // XSPEC-061：計算錯誤指紋 + 收斂偵測
+    if (result.judge_result) {
+      const fingerprint = computeErrorFingerprint(result.judge_result);
+      if (isStuck(fingerprintHistory, fingerprint, fingerprintThreshold)) {
+        return {
+          success: false,
+          attempts,
+          total_retry_cost_usd: totalRetryCost,
+          stop_reason: "stuck_on_fingerprint",
+          fingerprint: fingerprint ?? undefined,
+          next_recipe: "circuit_breaker",
+        };
+      }
+      if (fingerprint !== null) {
+        fingerprintHistory.push(fingerprint);
+      }
+    }
+
+    // XSPEC-061：取得 failureSource，動態調整重試上限
+    const failureSource = result.failureSource ?? callbacks.getFailureSource?.();
+    if (failureSource && config.max_retries_by_source) {
+      const dynamicMax = getMaxRetries(config, failureSource);
+      if (dynamicMax !== currentMaxRetries) {
+        currentMaxRetries = dynamicMax;
+        // 重算 maxAttempts（1 initial + dynamic retries）
+        maxAttempts = 1 + currentMaxRetries;
+      }
+    }
+
     consecutiveFailures++;
     // 記錄失敗假設供後續分析
     previousHypotheses.push({
@@ -137,6 +197,83 @@ export async function runFixLoop(
     total_retry_cost_usd: totalRetryCost,
     stop_reason: "max_retries",
   };
+}
+
+// ─────────────────────────────────────────────────────────────────
+// XSPEC-061: 錯誤指紋偵測 + 動態重試上限
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * 計算錯誤指紋（XSPEC-061 AC-2）
+ *
+ * 利用 Judge 現有輸出計算指紋，零額外 LLM 呼叫。
+ *
+ * 公式：sha256(sorted(attack_vectors).join('|') + '::' + failureCategory) 取前 16 字元
+ *
+ * @param judgeResult - Judge 審查結果（需含 attack_vectors 和 reasoning）
+ * @returns 16 字元 hex 指紋，Judge PASS 時回傳 null
+ */
+export function computeErrorFingerprint(judgeResult: JudgeResult): string | null {
+  if (judgeResult.verdict === "PASS") return null;
+
+  const attackVectors = (judgeResult.attack_vectors ?? []).sort().join("|");
+  const failureCategory = categorizeFailureReason(judgeResult.reasoning);
+
+  return createHash("sha256")
+    .update(`${attackVectors}::${failureCategory}`)
+    .digest("hex")
+    .slice(0, 16);
+}
+
+/**
+ * 規則式分類 failureReason（不呼叫 LLM）
+ */
+function categorizeFailureReason(reason: string): string {
+  if (/compile|syntax|type\s*error|build/i.test(reason)) return "compilation";
+  if (/test.*fail|assert|spec.*fail/i.test(reason)) return "test_failure";
+  if (/tool.*fail|command.*not\s*found|exit\s*code/i.test(reason)) return "tool_failure";
+  if (/resource|budget|token.*limit|timeout/i.test(reason)) return "resource_exhaustion";
+  return "other";
+}
+
+/**
+ * 判斷 fix_loop 是否卡死（XSPEC-061 AC-1）
+ *
+ * 檢查最近 threshold 次迭代（history 最後 threshold-1 筆 + current）是否全部相同。
+ *
+ * @param history - 過去所有迭代的指紋記錄（不含本次）
+ * @param current - 本次迭代的指紋（null 表示 Judge PASS，永不卡死）
+ * @param threshold - 連續相同次數觸發停止的閾值（預設 2）
+ * @returns true = 卡死，應停止重試
+ */
+export function isStuck(history: string[], current: string | null, threshold: number): boolean {
+  if (current === null) return false;
+  if (history.length < threshold - 1) return false;
+
+  const recent = history.slice(-(threshold - 1));
+  return recent.every((fp) => fp === current);
+}
+
+/**
+ * 依 failureSource 取得動態重試上限（XSPEC-061 AC-5, AC-6, AC-7, AC-8）
+ *
+ * 查詢順序：
+ * 1. max_retries_by_source[failureSource]（若有定義）
+ * 2. 全域 max_retries（fallback，向後相容）
+ *
+ * @param config - Fix Loop 設定
+ * @param failureSource - 此次的失敗來源
+ * @returns 此次應使用的最大重試次數
+ */
+export function getMaxRetries(
+  config: FixLoopConfig,
+  failureSource: FailureSource | undefined,
+): number {
+  if (failureSource !== undefined && config.max_retries_by_source) {
+    const perSource = config.max_retries_by_source[failureSource];
+    if (perSource !== undefined) return perSource;
+  }
+  return config.max_retries;
 }
 
 /**

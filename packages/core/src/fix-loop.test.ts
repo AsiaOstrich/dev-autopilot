@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { runFixLoop, buildStructuredFeedback, type ExecuteResult } from "./fix-loop.js";
+import { runFixLoop, buildStructuredFeedback, computeErrorFingerprint, isStuck, getMaxRetries, type ExecuteResult } from "./fix-loop.js";
 import type { FixLoopConfig } from "./types.js";
+import type { JudgeResult } from "./judge.js";
 
 describe("runFixLoop", () => {
   it("首次通過 → 不重試", async () => {
@@ -185,6 +186,284 @@ describe("runFixLoop", () => {
     expect(receivedFeedbacks[1]).toContain("Root Cause Investigation");
     // 第三次應含 Pattern Analysis 指引
     expect(receivedFeedbacks[2]).toContain("Pattern Analysis");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// XSPEC-061: 錯誤指紋偵測 + 動態重試上限
+// ─────────────────────────────────────────────────────────────────
+
+describe("computeErrorFingerprint()（XSPEC-061 AC-2）", () => {
+  it("Judge verdict=PASS 時回傳 null", () => {
+    const judgeResult: JudgeResult = { verdict: "PASS", reasoning: "all good" };
+    expect(computeErrorFingerprint(judgeResult)).toBeNull();
+  });
+
+  it("Judge verdict=REJECT 且有 attack_vectors 時回傳非 null 字串", () => {
+    const judgeResult: JudgeResult = {
+      verdict: "REJECT",
+      reasoning: "compilation failed",
+      attack_vectors: ["SQL Injection"],
+    };
+    const fingerprint = computeErrorFingerprint(judgeResult);
+    expect(fingerprint).not.toBeNull();
+    expect(typeof fingerprint).toBe("string");
+  });
+
+  it("相同 attack_vectors 和 reasoning 產出相同指紋（確定性）", () => {
+    const result1: JudgeResult = {
+      verdict: "REJECT",
+      reasoning: "type error on line 42",
+      attack_vectors: ["Type Mismatch", "Null Reference"],
+    };
+    const result2: JudgeResult = {
+      verdict: "REJECT",
+      reasoning: "type error on line 42",
+      attack_vectors: ["Type Mismatch", "Null Reference"],
+    };
+    expect(computeErrorFingerprint(result1)).toBe(computeErrorFingerprint(result2));
+  });
+
+  it("attack_vectors 順序不影響指紋（sorted 後計算）", () => {
+    const resultA: JudgeResult = {
+      verdict: "REJECT",
+      reasoning: "compile error",
+      attack_vectors: ["B-vector", "A-vector"],
+    };
+    const resultB: JudgeResult = {
+      verdict: "REJECT",
+      reasoning: "compile error",
+      attack_vectors: ["A-vector", "B-vector"],
+    };
+    expect(computeErrorFingerprint(resultA)).toBe(computeErrorFingerprint(resultB));
+  });
+
+  it("不同 attack_vectors 產出不同指紋", () => {
+    const result1: JudgeResult = {
+      verdict: "REJECT",
+      reasoning: "error",
+      attack_vectors: ["SQL Injection"],
+    };
+    const result2: JudgeResult = {
+      verdict: "REJECT",
+      reasoning: "error",
+      attack_vectors: ["Path Traversal"],
+    };
+    expect(computeErrorFingerprint(result1)).not.toBe(computeErrorFingerprint(result2));
+  });
+
+  it("attack_vectors 為空陣列時仍能計算指紋", () => {
+    const judgeResult: JudgeResult = {
+      verdict: "REJECT",
+      reasoning: "unknown error",
+      attack_vectors: [],
+    };
+    const fingerprint = computeErrorFingerprint(judgeResult);
+    expect(fingerprint).not.toBeNull();
+    expect(typeof fingerprint).toBe("string");
+    expect((fingerprint as string).length).toBe(16); // 取前 16 字元
+  });
+
+  it("attack_vectors 為 undefined 時仍能計算指紋（降級處理）", () => {
+    const judgeResult: JudgeResult = {
+      verdict: "REJECT",
+      reasoning: "compilation failed",
+    };
+    const fingerprint = computeErrorFingerprint(judgeResult);
+    expect(fingerprint).not.toBeNull();
+  });
+});
+
+describe("isStuck()（XSPEC-061 AC-1）", () => {
+  // 簽名：isStuck(history: string[], current: string | null, threshold: number): boolean
+  // history：之前迭代的指紋記錄（不含本次）
+  // current：本次迭代的指紋
+  // 邏輯：取 history 最後 (threshold-1) 筆 + current，若全部相同 → stuck=true
+
+  it("空歷史（首次迭代）→ 不卡死", () => {
+    expect(isStuck([], "abc123", 2)).toBe(false);
+  });
+
+  it("history 1 筆 + current 相同 → 連續 2 次 → 卡死（閾值 2）", () => {
+    // history = ["abc123"]（第1次），current = "abc123"（第2次）→ 合計 2 次相同
+    expect(isStuck(["abc123"], "abc123", 2)).toBe(true);
+  });
+
+  it("history 1 筆 + current 不同 → 不卡死", () => {
+    expect(isStuck(["abc123"], "def456", 2)).toBe(false);
+  });
+
+  it("history 有多筆但最後 1 筆與 current 不同 → 不卡死", () => {
+    // 最後一筆是 "def456"，current 是 "abc123" → 最後 2 次不同
+    expect(isStuck(["abc123", "abc123", "def456"], "abc123", 2)).toBe(false);
+  });
+
+  it("history 最後 2 筆 + current 均相同 → 卡死（閾值 3）", () => {
+    // threshold=3：取 history 最後 2 筆 + current = 3 筆
+    expect(isStuck(["abc123", "abc123"], "abc123", 3)).toBe(true);
+  });
+
+  it("history 只有 1 筆但 current 相同 → 不卡死（閾值 3，不足 3 次）", () => {
+    // threshold=3：需要 history 最後 2 筆 + current，但 history 只有 1 筆 → 不足
+    expect(isStuck(["abc123"], "abc123", 3)).toBe(false);
+  });
+
+  it("current 為 null（Judge PASS）→ 永不卡死", () => {
+    expect(isStuck([], null, 2)).toBe(false);
+    expect(isStuck(["abc123"], null, 2)).toBe(false);
+    expect(isStuck(["abc123", "abc123"], null, 2)).toBe(false);
+  });
+});
+
+describe("getMaxRetries()（XSPEC-061 AC-5, AC-6, AC-7, AC-8）", () => {
+  it("未定義 max_retries_by_source → 回傳全域 max_retries（AC-8 向後相容）", () => {
+    const config: FixLoopConfig = { max_retries: 3, max_retry_budget_usd: 5.0 };
+    expect(getMaxRetries(config, "compilation")).toBe(3);
+    expect(getMaxRetries(config, "test_failure")).toBe(3);
+  });
+
+  it("failureSource=compilation → 回傳 max_retries_by_source.compilation=5（AC-5）", () => {
+    const config: FixLoopConfig = {
+      max_retries: 3,
+      max_retry_budget_usd: 5.0,
+      max_retries_by_source: { compilation: 5 },
+    };
+    expect(getMaxRetries(config, "compilation")).toBe(5);
+  });
+
+  it("failureSource=tool_failure → 回傳 max_retries_by_source.tool_failure=1（AC-5）", () => {
+    const config: FixLoopConfig = {
+      max_retries: 3,
+      max_retry_budget_usd: 5.0,
+      max_retries_by_source: { compilation: 5, tool_failure: 1 },
+    };
+    expect(getMaxRetries(config, "tool_failure")).toBe(1);
+  });
+
+  it("failureSource=resource_exhaustion → 回傳 0，立即停止（AC-7）", () => {
+    const config: FixLoopConfig = {
+      max_retries: 3,
+      max_retry_budget_usd: 5.0,
+      max_retries_by_source: { resource_exhaustion: 0 },
+    };
+    expect(getMaxRetries(config, "resource_exhaustion")).toBe(0);
+  });
+
+  it("未在 max_retries_by_source 定義的 failureSource → fallback 到全域 max_retries（AC-6）", () => {
+    const config: FixLoopConfig = {
+      max_retries: 3,
+      max_retry_budget_usd: 5.0,
+      max_retries_by_source: { compilation: 5 }, // 只定義 compilation
+    };
+    // model_degradation 未定義 → 使用全域 3
+    expect(getMaxRetries(config, "model_degradation")).toBe(3);
+  });
+
+  it("failureSource 為 undefined → fallback 到全域 max_retries", () => {
+    const config: FixLoopConfig = {
+      max_retries: 3,
+      max_retry_budget_usd: 5.0,
+      max_retries_by_source: { compilation: 5 },
+    };
+    expect(getMaxRetries(config, undefined)).toBe(3);
+  });
+});
+
+describe("runFixLoop + 指紋偵測整合（XSPEC-061 AC-1, AC-3）", () => {
+  it("連續 2 次相同指紋 → stop_reason=stuck_on_fingerprint（AC-1）", async () => {
+    // 模擬連續相同指紋：兩次 execute 都回傳相同 attack_vectors
+    let callCount = 0;
+    const execute = vi.fn(async (): Promise<ExecuteResult> => {
+      callCount++;
+      return {
+        success: false,
+        cost_usd: 0.3,
+        feedback: "compilation failed",
+        judge_result: {
+          verdict: "REJECT",
+          reasoning: "type error",
+          attack_vectors: ["Type Mismatch"], // 每次相同
+        },
+      };
+    });
+
+    const result = await runFixLoop(
+      {
+        max_retries: 5,
+        max_retry_budget_usd: 10.0,
+        stop_on_fingerprint_repeat: 2,
+      },
+      { execute },
+    );
+
+    expect(result.stop_reason).toBe("stuck_on_fingerprint");
+    expect(result.fingerprint).toBeDefined();
+    // 停在第 2 次（initial + 1 retry），不等到 max_retries=5
+    expect(result.attempts).toHaveLength(2);
+  });
+
+  it("指紋偵測優先於 max_retries（AC-1 + AC-5 組合）", async () => {
+    const execute = vi.fn(async (): Promise<ExecuteResult> => ({
+      success: false,
+      cost_usd: 0.3,
+      feedback: "compilation failed",
+      judge_result: {
+        verdict: "REJECT",
+        reasoning: "type error",
+        attack_vectors: ["Identical-Vector"],
+      },
+    }));
+
+    // max_retries_by_source.compilation=5，但指紋閾值 2 應優先停止
+    const result = await runFixLoop(
+      {
+        max_retries: 3,
+        max_retry_budget_usd: 10.0,
+        max_retries_by_source: { compilation: 5 },
+        stop_on_fingerprint_repeat: 2,
+      },
+      {
+        execute,
+        getFailureSource: () => "compilation",
+      },
+    );
+
+    expect(result.stop_reason).toBe("stuck_on_fingerprint");
+    expect(result.attempts.length).toBeLessThan(5); // 不等到 compilation 的 max_retries=5
+  });
+
+  it("compilation failureSource 使用 max_retries=5（AC-5）", async () => {
+    let callCount = 0;
+    const execute = vi.fn(async (): Promise<ExecuteResult> => {
+      callCount++;
+      // 每次回傳不同指紋（不觸發 stuck），直到耗盡重試
+      return {
+        success: false,
+        cost_usd: 0.1,
+        feedback: "failing",
+        judge_result: {
+          verdict: "REJECT",
+          reasoning: "compile error",
+          attack_vectors: [`unique-${callCount}`], // 每次不同 → 不觸發 stuck
+        },
+      };
+    });
+
+    const result = await runFixLoop(
+      {
+        max_retries: 3,      // 全域
+        max_retry_budget_usd: 100.0,
+        max_retries_by_source: { compilation: 5 }, // compilation 優先
+        stop_on_fingerprint_repeat: 2,
+      },
+      {
+        execute,
+        getFailureSource: () => "compilation",
+      },
+    );
+
+    expect(result.stop_reason).toBe("max_retries");
+    expect(result.attempts).toHaveLength(6); // 1 initial + 5 retries
   });
 });
 

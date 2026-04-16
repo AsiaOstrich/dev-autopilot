@@ -9,7 +9,7 @@ export { runJudge, runDualStageJudge, shouldRunJudge, buildJudgePrompt, parseJud
 export { runQualityGate, checkAgentsMdSync, checkFrontendDesignCompliance, type QualityGateResult, type QualityGateStep, type QualityGateOptions, type ShellExecutor, type HookTelemetry, type FrontendDesignCheckResult } from "./quality-gate.js";
 export { resolvePlan, type PlanResolverOptions } from "./plan-resolver.js";
 export { resolveQualityProfile, checkQualityWarnings } from "./quality-profile.js";
-export { runFixLoop, buildStructuredFeedback, type ExecuteResult, type FixLoopCallbacks } from "./fix-loop.js";
+export { runFixLoop, buildStructuredFeedback, computeErrorFingerprint, isStuck, getMaxRetries, type ExecuteResult, type FixLoopCallbacks } from "./fix-loop.js";
 export { parseTelemetryJsonl } from "./telemetry-parser.js";
 export { TokenCostAnalyzer, ProposalGenerator, HookEfficiencyAnalyzer, HookEfficiencyProposalGenerator, QualityStrategyAnalyzer, QualityStrategyProposalGenerator, DriftDetector, ApprovalManager, serializeProposal, parseProposal } from "./evolution/index.js";
 export type { EvolutionConfig, AnalyzerConfig, QualityStrategyConfig, DriftDetectionConfig, AnalysisResult, HookEfficiencyAnalysisResult, HookEfficiencyIssue, QualityStrategyAnalysisResult, QualityStrategyIssue, QualityStrategySignal, DriftAnalysisResult, DriftItem, DriftType, GroupKey, GroupStats, Outlier, Proposal, ProposalMeta, ProposalStatus, ProposalImpact, ProposalTarget, AnalysisLogEntry, ConfirmApplyFn, ApprovalResult } from "./evolution/index.js";

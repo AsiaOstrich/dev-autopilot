@@ -830,10 +830,33 @@ export interface QualityConfig {
  * 控制自動修復迴圈的行為。
  */
 export interface FixLoopConfig {
-  /** 最大重試次數 */
+  /** 最大重試次數（全域 fallback） */
   max_retries: number;
   /** 單一 task 重試預算上限（美元） */
   max_retry_budget_usd: number;
+  /**
+   * 各 failureSource 的動態重試上限（XSPEC-061）
+   *
+   * 未定義的 failureSource 使用全域 max_retries 作為 fallback。
+   * 設為 0 表示立即停止（0 次重試）。
+   *
+   * 範例：
+   * ```yaml
+   * max_retries_by_source:
+   *   compilation: 5      # 高可修復性
+   *   test_failure: 4
+   *   tool_failure: 1     # 低可修復性
+   *   resource_exhaustion: 0  # 立即停止
+   * ```
+   */
+  max_retries_by_source?: Partial<Record<FailureSource, number>>;
+  /**
+   * 連續相同 error_fingerprint 的觸發停止閾值（XSPEC-061）
+   *
+   * 連續 N 次相同指紋 → 視為卡死，停止重試。
+   * 預設 2（連續兩次即停止）。
+   */
+  stop_on_fingerprint_repeat?: number;
 }
 
 /**
@@ -861,7 +884,20 @@ export interface FixLoopResult {
   /** 總重試成本（美元） */
   total_retry_cost_usd: number;
   /** 停止原因 */
-  stop_reason: "passed" | "max_retries" | "budget_exceeded" | "circuit_open";
+  stop_reason: "passed" | "max_retries" | "budget_exceeded" | "circuit_open" | "stuck_on_fingerprint";
+  /**
+   * 錯誤指紋（XSPEC-061）
+   *
+   * 連續相同指紋導致停止時（stop_reason="stuck_on_fingerprint"）填入，其餘為 undefined。
+   * 格式：sha256 前 16 字元 hex string。
+   */
+  fingerprint?: string;
+  /**
+   * 下一個建議 Recipe（XSPEC-061）
+   *
+   * stuck_on_fingerprint 停止後，建議升級到的 Recovery Strategy。
+   */
+  next_recipe?: RecoveryStrategy;
 }
 
 /** Checkpoint 策略 */
