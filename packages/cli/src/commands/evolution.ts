@@ -9,6 +9,7 @@
  */
 
 import { readFile } from "node:fs/promises";
+import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { load as yamlLoad } from "js-yaml";
 import type { Command } from "commander";
@@ -240,6 +241,54 @@ export async function executeEvolutionApprove(id: string, opts: {
 }
 
 /**
+ * devap evolution apply <id>
+ *
+ * 套用已核准的提案。若無 --yes 旗標，顯示 diff 後等待使用者輸入 y/n。
+ */
+export async function executeEvolutionApply(id: string, opts: {
+  cwd?: string;
+  yes?: boolean;
+}): Promise<void> {
+  const cwd = opts.cwd ?? process.cwd();
+  const evolutionBackend = new LocalStorageBackend(join(cwd, ".evolution"));
+  const manager = new ApprovalManager(evolutionBackend);
+
+  const confirmFn = opts.yes
+    ? async (_pid: string, diff: string) => {
+        console.log("\n── Diff ──────────────────────────────────────────");
+        console.log(diff);
+        console.log("─────────────────────────────────────────────────");
+        console.log("（--yes 旗標：自動確認）");
+        return true;
+      }
+    : async (_pid: string, diff: string) => {
+        console.log("\n── Diff ──────────────────────────────────────────");
+        console.log(diff);
+        console.log("─────────────────────────────────────────────────");
+
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        return new Promise<boolean>((resolve) => {
+          rl.question("確認套用此提案？(y/N) ", (answer) => {
+            rl.close();
+            resolve(answer.toLowerCase() === "y");
+          });
+        });
+      };
+
+  const result = await manager.apply(id, confirmFn);
+  if (result.success) {
+    console.log(`\n✅ ${result.message}`);
+  } else {
+    if (result.message.includes("取消")) {
+      console.log(`ℹ️  ${result.message}`);
+    } else {
+      console.error(`❌ ${result.message}`);
+      process.exit(1);
+    }
+  }
+}
+
+/**
  * devap evolution reject <id> --reason <reason>
  */
 export async function executeEvolutionReject(id: string, opts: {
@@ -306,6 +355,20 @@ export function registerEvolutionCommand(program: Command): void {
         await executeEvolutionApprove(id, opts);
       } catch (err) {
         console.error("❌ 核准失敗：", err instanceof Error ? err.message : err);
+        process.exit(1);
+      }
+    });
+
+  evo
+    .command("apply <id>")
+    .description("套用已核准的演進提案（id：PROP-YYYY-NNNN）")
+    .option("--yes", "跳過互動確認直接套用")
+    .option("--cwd <path>", "專案工作目錄（預設：當前目錄）")
+    .action(async (id: string, opts: { yes?: boolean; cwd?: string }) => {
+      try {
+        await executeEvolutionApply(id, opts);
+      } catch (err) {
+        console.error("❌ 套用失敗：", err instanceof Error ? err.message : err);
         process.exit(1);
       }
     });
