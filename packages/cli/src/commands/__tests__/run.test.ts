@@ -55,6 +55,92 @@ describe("plan validation（透過 @devap/core）", () => {
 });
 
 // ============================================================
+// XSPEC-049: createProgressEmitter（CLI 結構化進度顯示）
+// ============================================================
+
+describe("XSPEC-049: createProgressEmitter", () => {
+  it("task:start → ⏳ [N/M] 格式", async () => {
+    const lines: string[] = [];
+    const { createProgressEmitter } = await import("../../progress.js");
+    const { emitter } = createProgressEmitter(false, (m) => lines.push(m));
+
+    emitter.emit("event", { type: "orchestrator:start", plan_id: "p", task_count: 3, timestamp: "" });
+    emitter.emit("event", { type: "task:start", task_id: "T-001", title: "實作登入", timestamp: "" });
+
+    expect(lines[0]).toMatch(/⏳.*\[1\/3\].*T-001.*實作登入/);
+  });
+
+  it("task:complete → ✅ 含 duration", async () => {
+    const lines: string[] = [];
+    const { createProgressEmitter } = await import("../../progress.js");
+    const { emitter } = createProgressEmitter(false, (m) => lines.push(m));
+
+    emitter.emit("event", { type: "orchestrator:start", plan_id: "p", task_count: 2, timestamp: "" });
+    emitter.emit("event", { type: "task:start", task_id: "T-001", title: "任務一", timestamp: "" });
+    emitter.emit("event", { type: "task:complete", task_id: "T-001", status: "success", duration_ms: 5200, timestamp: "" });
+
+    expect(lines[1]).toMatch(/✅.*T-001.*5\.2s/);
+  });
+
+  it("task:failed → ❌ 含 error", async () => {
+    const lines: string[] = [];
+    const { createProgressEmitter } = await import("../../progress.js");
+    const { emitter } = createProgressEmitter(false, (m) => lines.push(m));
+
+    emitter.emit("event", { type: "orchestrator:start", plan_id: "p", task_count: 1, timestamp: "" });
+    emitter.emit("event", { type: "task:start", task_id: "T-001", title: "任務", timestamp: "" });
+    emitter.emit("event", { type: "task:failed", task_id: "T-001", error: "build error", timestamp: "" });
+
+    expect(lines[1]).toMatch(/❌.*T-001.*build error/);
+  });
+
+  it("task:cancelled → 🚫 含 reason", async () => {
+    const lines: string[] = [];
+    const { createProgressEmitter } = await import("../../progress.js");
+    const { emitter } = createProgressEmitter(false, (m) => lines.push(m));
+
+    emitter.emit("event", { type: "task:cancelled", task_id: "T-002", reason: "user_abort", timestamp: "" });
+
+    expect(lines[0]).toMatch(/🚫.*T-002.*user_abort/);
+  });
+
+  it("task:skipped → ⏭  含 reason", async () => {
+    const lines: string[] = [];
+    const { createProgressEmitter } = await import("../../progress.js");
+    const { emitter } = createProgressEmitter(false, (m) => lines.push(m));
+
+    emitter.emit("event", { type: "task:skipped", task_id: "T-003", reason: "deps_failed", timestamp: "" });
+
+    expect(lines[0]).toMatch(/⏭.*T-003.*deps_failed/);
+  });
+
+  it("signal:abort → ⚠  含 remaining_tasks", async () => {
+    const lines: string[] = [];
+    const { createProgressEmitter } = await import("../../progress.js");
+    const { emitter } = createProgressEmitter(false, (m) => lines.push(m));
+
+    emitter.emit("event", { type: "signal:abort", reason: "timeout", remaining_tasks: 3, timestamp: "" });
+
+    expect(lines[0]).toMatch(/⚠.*timeout.*3/);
+  });
+
+  it("verbose=false → onProgress 為 undefined", async () => {
+    const { createProgressEmitter } = await import("../../progress.js");
+    const { onProgress } = createProgressEmitter(false);
+    expect(onProgress).toBeUndefined();
+  });
+
+  it("verbose=true → onProgress 為縮排輸出函式", async () => {
+    const lines: string[] = [];
+    const { createProgressEmitter } = await import("../../progress.js");
+    const { onProgress } = createProgressEmitter(true, (m) => lines.push(m));
+    expect(typeof onProgress).toBe("function");
+    onProgress!("detail message");
+    expect(lines[0]).toMatch(/^\s+detail message/);
+  });
+});
+
+// ============================================================
 // XSPEC-051: createOrchestrationTelemetry（CLI telemetry 初始化）
 // ============================================================
 

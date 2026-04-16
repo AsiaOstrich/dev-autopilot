@@ -20,6 +20,7 @@ import {
 import { createAdapter } from "./adapter-factory.js";
 import { checkTermsAccepted, warnIfNoApiKey } from "./compliance.js";
 import { createOrchestrationTelemetry } from "./telemetry.js";
+import { createProgressEmitter } from "./progress.js";
 
 const program = new Command();
 
@@ -37,7 +38,8 @@ program
   .option("--max-parallel <n>", "最大並行任務數", parseInt)
   .option("--dry-run", "只驗證 plan + 檢查 adapter 可用性")
   .option("--accept-terms", "靜默合規提醒（等同 DEVAP_ACCEPT_TERMS=1）")
-  .action(async (opts: { plan: string; agent?: string; parallel?: boolean; maxParallel?: number; dryRun?: boolean; acceptTerms?: boolean }) => {
+  .option("--verbose", "顯示詳細 onProgress 內部訊息")
+  .action(async (opts: { plan: string; agent?: string; parallel?: boolean; maxParallel?: number; dryRun?: boolean; acceptTerms?: boolean; verbose?: boolean }) => {
     try {
       // 合規告知（首次執行時顯示，之後靜默）
       checkTermsAccepted(opts.acceptTerms);
@@ -107,7 +109,10 @@ program
 
       // 執行
       const mode = opts.parallel ? "並行" : "序列";
-      console.log(`\n🚀 開始執行（${mode}模式）...\n`);
+      console.log(`\n🚀 開始執行（${mode}模式，${plan.tasks.length} 個 Task）...\n`);
+
+      // XSPEC-049: 結構化進度顯示
+      const { emitter, onProgress } = createProgressEmitter(opts.verbose ?? false);
 
       // XSPEC-051: opt-in 遙測（靜默失敗，不影響主流程）
       const orchestrationTelemetry = await createOrchestrationTelemetry();
@@ -115,12 +120,13 @@ program
       const report = await orchestrate(plan, adapter, {
         cwd,
         sessionId: plan.session_id,
-        onProgress: (msg: string) => console.log(msg),
+        onProgress,
         safetyHooks: [createDefaultSafetyHook()],
         parallel: opts.parallel,
         maxParallel: opts.maxParallel,
         existingClaudeMdPath,
         orchestrationTelemetry,
+        emitter,
       });
 
       // 輸出報告
