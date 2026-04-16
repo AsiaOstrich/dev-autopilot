@@ -19,6 +19,7 @@ import {
 } from "@devap/core";
 import { createAdapter } from "./adapter-factory.js";
 import { checkTermsAccepted, warnIfNoApiKey } from "./compliance.js";
+import { createOrchestrationTelemetry } from "./telemetry.js";
 
 const program = new Command();
 
@@ -107,6 +108,10 @@ program
       // 執行
       const mode = opts.parallel ? "並行" : "序列";
       console.log(`\n🚀 開始執行（${mode}模式）...\n`);
+
+      // XSPEC-051: opt-in 遙測（靜默失敗，不影響主流程）
+      const orchestrationTelemetry = await createOrchestrationTelemetry();
+
       const report = await orchestrate(plan, adapter, {
         cwd,
         sessionId: plan.session_id,
@@ -115,6 +120,7 @@ program
         parallel: opts.parallel,
         maxParallel: opts.maxParallel,
         existingClaudeMdPath,
+        orchestrationTelemetry,
       });
 
       // 輸出報告
