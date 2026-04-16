@@ -129,11 +129,19 @@ export async function runFixLoop(
 
     const result = await callbacks.execute(lastFeedback, i);
 
+    // XSPEC-061 AC-4：計算指紋
+    // - judge_result 有提供 → computeErrorFingerprint（PASS 時回傳 null，REJECT 回傳 hash）
+    // - judge_result 未提供 → undefined（向後相容，不填入）
+    const fingerprint: string | null | undefined = result.judge_result
+      ? computeErrorFingerprint(result.judge_result)
+      : undefined;
+
     const attempt: FixLoopAttempt = {
       attempt: i,
       success: result.success,
       cost_usd: result.cost_usd,
       feedback: result.feedback,
+      error_fingerprint: fingerprint,
     };
     attempts.push(attempt);
 
@@ -152,9 +160,8 @@ export async function runFixLoop(
       totalRetryCost += result.cost_usd;
     }
 
-    // XSPEC-061：計算錯誤指紋 + 收斂偵測
-    if (result.judge_result) {
-      const fingerprint = computeErrorFingerprint(result.judge_result);
+    // XSPEC-061：收斂偵測（利用已計算的 fingerprint）
+    if (fingerprint !== undefined) {
       if (isStuck(fingerprintHistory, fingerprint, fingerprintThreshold)) {
         return {
           success: false,

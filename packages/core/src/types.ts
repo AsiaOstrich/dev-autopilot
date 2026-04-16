@@ -871,6 +871,13 @@ export interface FixLoopAttempt {
   cost_usd: number;
   /** 錯誤回饋（失敗時） */
   feedback?: string;
+  /**
+   * 錯誤指紋（XSPEC-061 AC-4）
+   *
+   * 從 Judge 輸出計算的 sha256 前 16 字元；Judge PASS 時為 null；
+   * 未提供 judge_result 時為 undefined（向後相容）。
+   */
+  error_fingerprint?: string | null;
 }
 
 /**

@@ -467,6 +467,55 @@ describe("runFixLoop + 指紋偵測整合（XSPEC-061 AC-1, AC-3）", () => {
   });
 });
 
+describe("FixLoopAttempt.error_fingerprint 記錄（XSPEC-061 AC-4）", () => {
+  it("每次迭代的 attempt 記錄包含 error_fingerprint（有 judge_result 時）", async () => {
+    let callCount = 0;
+    const execute = vi.fn(async (): Promise<ExecuteResult> => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          success: false,
+          cost_usd: 0.1,
+          feedback: "fail",
+          judge_result: { verdict: "REJECT", reasoning: "type error", attack_vectors: ["A"] },
+        };
+      }
+      // 成功時也提供 judge_result（PASS verdict）
+      return {
+        success: true,
+        cost_usd: 0.1,
+        judge_result: { verdict: "PASS", reasoning: "all good" },
+      };
+    });
+
+    const result = await runFixLoop(
+      { max_retries: 3, max_retry_budget_usd: 10.0 },
+      { execute },
+    );
+
+    // 第 1 次嘗試失敗，judge_result REJECT → error_fingerprint 為 hash string
+    expect(result.attempts[0].error_fingerprint).not.toBeUndefined();
+    expect(typeof result.attempts[0].error_fingerprint).toBe("string");
+    // 第 2 次嘗試成功，judge_result PASS → error_fingerprint 為 null
+    expect(result.attempts[1].error_fingerprint).toBeNull();
+  });
+
+  it("未提供 judge_result 時 error_fingerprint 為 undefined（向後相容）", async () => {
+    const execute = vi.fn(async (): Promise<ExecuteResult> => ({
+      success: true,
+      cost_usd: 0.1,
+    }));
+
+    const result = await runFixLoop(
+      { max_retries: 3, max_retry_budget_usd: 10.0 },
+      { execute },
+    );
+
+    // 無 judge_result → error_fingerprint 為 undefined
+    expect(result.attempts[0].error_fingerprint).toBeUndefined();
+  });
+});
+
 describe("buildStructuredFeedback（Superpowers 借鑑）", () => {
   it("1 次失敗 → Root Cause Investigation", () => {
     const feedback = buildStructuredFeedback("test error", 1, []);
