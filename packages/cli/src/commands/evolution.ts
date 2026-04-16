@@ -17,11 +17,13 @@ import {
   LocalStorageBackend,
   TokenCostAnalyzer,
   HookEfficiencyAnalyzer,
+  QualityStrategyAnalyzer,
   ProposalGenerator,
   HookEfficiencyProposalGenerator,
+  QualityStrategyProposalGenerator,
   ApprovalManager,
 } from "@devap/core";
-import type { EvolutionConfig, AnalyzerConfig, ProposalStatus } from "@devap/core";
+import type { EvolutionConfig, AnalyzerConfig, QualityStrategyConfig, ProposalStatus } from "@devap/core";
 
 // ─── 預設配置 ───────────────────────────────────────────────
 
@@ -37,11 +39,20 @@ const DEFAULT_HOOK_EFFICIENCY_CONFIG: AnalyzerConfig = {
   threshold_ratio: 0.2, // pass_rate < 0.8 觸發
 };
 
+const DEFAULT_QUALITY_STRATEGY_CONFIG: QualityStrategyConfig = {
+  enabled: true,
+  min_samples: 5,
+  threshold_ratio: 1.5,   // token 超過全域中位數 1.5 倍視為 over_provisioned
+  pass_rate_target: 0.7,  // pass_rate < 0.7 視為 under_performing
+  token_overhead_ratio: 1.5,
+};
+
 const DEFAULT_EVOLUTION_CONFIG: EvolutionConfig = {
   enabled: true,
   analyzers: {
     "token-cost": DEFAULT_TOKEN_COST_CONFIG,
     "hook-efficiency": DEFAULT_HOOK_EFFICIENCY_CONFIG,
+    "quality-strategy": DEFAULT_QUALITY_STRATEGY_CONFIG,
   },
   trigger: { mode: "manual" },
   approval: { required: true },
@@ -65,6 +76,10 @@ async function loadEvolutionConfig(cwd: string): Promise<EvolutionConfig> {
         "hook-efficiency": {
           ...DEFAULT_HOOK_EFFICIENCY_CONFIG,
           ...parsed.analyzers?.["hook-efficiency"],
+        },
+        "quality-strategy": {
+          ...DEFAULT_QUALITY_STRATEGY_CONFIG,
+          ...parsed.analyzers?.["quality-strategy"],
         },
       },
     };
@@ -116,7 +131,7 @@ export async function executeEvolutionAnalyze(opts: {
   // ── Token Cost Analysis ──────────────────────────────────
   const tokenConfig = config.analyzers["token-cost"];
   if (tokenConfig.enabled) {
-    console.log("📊 [1/2] Token 成本分析器...");
+    console.log("📊 [1/3] Token 成本分析器...");
     const tokenAnalyzer = new TokenCostAnalyzer(executionHistoryBackend, tokenConfig);
     const tokenResult = await tokenAnalyzer.analyze();
 
@@ -142,7 +157,7 @@ export async function executeEvolutionAnalyze(opts: {
   // ── Hook Efficiency Analysis ─────────────────────────────
   const hookConfig = config.analyzers["hook-efficiency"];
   if (hookConfig?.enabled) {
-    console.log("\n🪝 [2/2] Hook 效率分析器...");
+    console.log("\n🪝 [2/3] Hook 效率分析器...");
     const hookAnalyzer = new HookEfficiencyAnalyzer(cwd, hookConfig);
     const hookResult = await hookAnalyzer.analyze();
 
@@ -164,6 +179,38 @@ export async function executeEvolutionAnalyze(opts: {
         totalProposals += hookProposals.length;
         console.log(`  📝 產生 ${hookProposals.length} 個提案`);
         for (const p of hookProposals) {
+          console.log(`     - ${p.meta.id}（impact: ${p.meta.impact}）→ ${p.meta.target.file ?? "unknown"}`);
+        }
+      }
+    }
+  }
+
+  // ── Quality Strategy Analysis ────────────────────────────
+  const qualityConfig = config.analyzers["quality-strategy"];
+  if (qualityConfig?.enabled) {
+    console.log("\n🎯 [3/3] 品質策略分析器...");
+    const qualityAnalyzer = new QualityStrategyAnalyzer(executionHistoryBackend, qualityConfig);
+    const qualityResult = await qualityAnalyzer.analyze();
+
+    if (qualityResult.skipped) {
+      console.log(`  ⏭  跳過：${qualityResult.skip_reason}（掃描 ${qualityResult.total_tasks_scanned} 筆任務）`);
+    } else {
+      const confLabel = qualityResult.confidence === "high" ? "高信心" : "低信心（建議累積更多數據）";
+      console.log(`  ✓  掃描 ${qualityResult.total_tasks_scanned} 筆任務（${qualityResult.total_groups_scanned} 個 tag 群組），信心：${confLabel}`);
+      console.log(`  📌 發現 ${qualityResult.issues.length} 個品質策略問題`);
+
+      if (qualityResult.issues.length > 0) {
+        for (const issue of qualityResult.issues) {
+          const tagLabel = issue.tag_group.join(", ") || "(no-tags)";
+          const signalLabel = issue.signal === "over_provisioned" ? "過度配置" : "效果不足";
+          console.log(`     - [${tagLabel}]：${signalLabel}，severity=${issue.severity_pct}%，pass_rate=${Math.round(issue.avg_pass_rate * 1000) / 10}%`);
+        }
+
+        const qualityGenerator = new QualityStrategyProposalGenerator(evolutionBackend, projectName);
+        const qualityProposals = await qualityGenerator.generate(qualityResult);
+        totalProposals += qualityProposals.length;
+        console.log(`  📝 產生 ${qualityProposals.length} 個提案`);
+        for (const p of qualityProposals) {
           console.log(`     - ${p.meta.id}（impact: ${p.meta.impact}）→ ${p.meta.target.file ?? "unknown"}`);
         }
       }

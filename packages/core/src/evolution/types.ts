@@ -16,13 +16,26 @@ export interface AnalyzerConfig {
   threshold_ratio: number;
 }
 
+/** 品質策略分析器額外配置 */
+export interface QualityStrategyConfig extends AnalyzerConfig {
+  /**
+   * pass_rate 低於此值時視為 under_performing（預設 0.7）
+   * 即：過去所有 run 中，有 30% 以上失敗
+   */
+  pass_rate_target?: number;
+  /**
+   * avg_tokens 超過全域中位數的倍數時視為 over_provisioned（預設 1.5）
+   */
+  token_overhead_ratio?: number;
+}
+
 /** Evolution 模組配置（對應 .evolution/config.yaml） */
 export interface EvolutionConfig {
   enabled: boolean;
   analyzers: {
     "token-cost": AnalyzerConfig;
     "hook-efficiency"?: AnalyzerConfig;
-    "quality-strategy"?: AnalyzerConfig;
+    "quality-strategy"?: QualityStrategyConfig;
   };
   trigger: {
     mode: "manual" | "on-report" | "scheduled";
@@ -154,12 +167,61 @@ export interface HookEfficiencyAnalysisResult {
   confidence?: "low" | "high";
 }
 
+// ─── 品質策略分析（XSPEC-004 Phase 4.3）─────────────────────
+
+/**
+ * 品質策略問題類型：
+ * - over_provisioned：pass_rate ≥ 95% 但 token 消耗顯著高於全域中位數（可能品質等級過高）
+ * - under_performing：pass_rate 低於目標閾值（品質策略可能不足）
+ */
+export type QualityStrategySignal = "over_provisioned" | "under_performing";
+
+/** 以 tag 群組為單位的品質策略問題 */
+export interface QualityStrategyIssue {
+  /** 識別此群組的 tag 組合 */
+  tag_group: string[];
+  /** 問題訊號類型 */
+  signal: QualityStrategySignal;
+  /** 群組內的任務數量 */
+  task_count: number;
+  /** 群組平均通過率（0–1） */
+  avg_pass_rate: number;
+  /** 群組平均 token 消耗 */
+  avg_tokens: number;
+  /** 全域中位數 token（跨所有群組） */
+  global_median_tokens: number;
+  /**
+   * 嚴重程度百分比（正數）：
+   * - over_provisioned：token 超出中位數的百分比
+   * - under_performing：pass_rate 低於目標閾值的百分比點數
+   */
+  severity_pct: number;
+  /** 人類可讀建議動作 */
+  suggested_action: string;
+}
+
+/** 品質策略分析結果 */
+export interface QualityStrategyAnalysisResult {
+  analyzer: "quality-strategy";
+  timestamp: string;
+  config: AnalyzerConfig;
+  /** 掃描的任務群組數量 */
+  total_groups_scanned: number;
+  /** 掃描的任務總數 */
+  total_tasks_scanned: number;
+  /** 發現的品質策略問題，按 severity_pct 降序 */
+  issues: QualityStrategyIssue[];
+  skipped: boolean;
+  skip_reason?: "insufficient_samples";
+  confidence?: "low" | "high";
+}
+
 // ─── 分析日誌 ───────────────────────────────────────────────
 
 /** analysis-log.jsonl 單行 */
 export interface AnalysisLogEntry {
   timestamp: string;
-  analyzer: "token-cost" | "hook-efficiency";
+  analyzer: "token-cost" | "hook-efficiency" | "quality-strategy";
   status: "completed" | "skipped";
   skip_reason?: "insufficient_samples" | "no_telemetry_data";
   total_tasks_scanned: number;

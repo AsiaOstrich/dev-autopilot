@@ -11,8 +11,8 @@ export { resolvePlan, type PlanResolverOptions } from "./plan-resolver.js";
 export { resolveQualityProfile, checkQualityWarnings } from "./quality-profile.js";
 export { runFixLoop, buildStructuredFeedback, type ExecuteResult, type FixLoopCallbacks } from "./fix-loop.js";
 export { parseTelemetryJsonl } from "./telemetry-parser.js";
-export { TokenCostAnalyzer, ProposalGenerator, HookEfficiencyAnalyzer, HookEfficiencyProposalGenerator, ApprovalManager, serializeProposal, parseProposal } from "./evolution/index.js";
-export type { EvolutionConfig, AnalyzerConfig, AnalysisResult, HookEfficiencyAnalysisResult, HookEfficiencyIssue, GroupKey, GroupStats, Outlier, Proposal, ProposalMeta, ProposalStatus, ProposalImpact, ProposalTarget, AnalysisLogEntry, ConfirmApplyFn, ApprovalResult } from "./evolution/index.js";
+export { TokenCostAnalyzer, ProposalGenerator, HookEfficiencyAnalyzer, HookEfficiencyProposalGenerator, QualityStrategyAnalyzer, QualityStrategyProposalGenerator, ApprovalManager, serializeProposal, parseProposal } from "./evolution/index.js";
+export type { EvolutionConfig, AnalyzerConfig, QualityStrategyConfig, AnalysisResult, HookEfficiencyAnalysisResult, HookEfficiencyIssue, QualityStrategyAnalysisResult, QualityStrategyIssue, QualityStrategySignal, GroupKey, GroupStats, Outlier, Proposal, ProposalMeta, ProposalStatus, ProposalImpact, ProposalTarget, AnalysisLogEntry, ConfirmApplyFn, ApprovalResult } from "./evolution/index.js";
 export { LocalStorageBackend } from "./execution-history/index.js";
 // SPEC-015: 打包框架
 export { loadRecipe, resolveConfig, executeTarget, interpolateCommand, orchestratePackaging } from "./packaging/index.js";
