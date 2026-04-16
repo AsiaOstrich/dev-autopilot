@@ -18,6 +18,7 @@ import {
   TokenCostAnalyzer,
   HookEfficiencyAnalyzer,
   QualityStrategyAnalyzer,
+  DriftDetector,
   ProposalGenerator,
   HookEfficiencyProposalGenerator,
   QualityStrategyProposalGenerator,
@@ -355,6 +356,58 @@ export async function executeEvolutionReject(id: string, opts: {
   }
 }
 
+/**
+ * devap evolution drift-scan
+ *
+ * 掃描 .standards/*.ai.yaml 和 CLAUDE.md/AGENTS.md 中的失效引用，
+ * 發現飄移時輸出摘要並寫入 drift-report.md。
+ */
+export async function executeEvolutionDriftScan(opts: {
+  cwd?: string;
+}): Promise<void> {
+  const cwd = opts.cwd ?? process.cwd();
+  const evolutionDir = join(cwd, ".evolution");
+
+  console.log("🔍 文件飄移偵測...\n");
+  const detector = new DriftDetector(cwd);
+  const result = await detector.analyze();
+
+  if (result.skipped) {
+    console.log(`  ⏭  跳過：${result.skip_reason}（找不到 .standards/ 目錄）`);
+    return;
+  }
+
+  console.log(`  ✓  掃描 ${result.files_scanned} 個檔案`);
+  console.log(`  📌 發現 ${result.items.length} 個飄移引用`);
+
+  if (result.items.length === 0) {
+    console.log("\n✅ 未發現飄移引用，標準文件狀態健康");
+    return;
+  }
+
+  const broken = result.items.filter((i) => i.drift_type === "broken_reference");
+  const stale = result.items.filter((i) => i.drift_type === "stale_standard");
+
+  if (broken.length > 0) {
+    console.log(`\n  ⚠️  失效路徑引用（${broken.length} 個）：`);
+    for (const item of broken) {
+      console.log(`     - ${item.source_file} → \`${item.reference}\`：${item.reason}`);
+    }
+  }
+  if (stale.length > 0) {
+    console.log(`\n  ⚠️  失效標準引用（${stale.length} 個）：`);
+    for (const item of stale) {
+      console.log(`     - ${item.source_file} → \`${item.reference}\`：${item.reason}`);
+    }
+  }
+
+  const reportPath = await detector.writeReport(result, evolutionDir);
+  if (reportPath) {
+    console.log(`\n📄 drift-report.md 已寫入：${reportPath}`);
+    console.log(`   請修正上述飄移引用後重新執行 drift-scan`);
+  }
+}
+
 // ─── Commander 註冊 ──────────────────────────────────────────
 
 /**
@@ -430,6 +483,19 @@ export function registerEvolutionCommand(program: Command): void {
         await executeEvolutionReject(id, opts);
       } catch (err) {
         console.error("❌ 駁回失敗：", err instanceof Error ? err.message : err);
+        process.exit(1);
+      }
+    });
+
+  evo
+    .command("drift-scan")
+    .description("掃描標準文件與 CLAUDE.md 中的失效引用，產出 drift-report.md（XSPEC-004 Phase 4.5）")
+    .option("--cwd <path>", "專案工作目錄（預設：當前目錄）")
+    .action(async (opts: { cwd?: string }) => {
+      try {
+        await executeEvolutionDriftScan(opts);
+      } catch (err) {
+        console.error("❌ Drift scan 失敗：", err instanceof Error ? err.message : err);
         process.exit(1);
       }
     });

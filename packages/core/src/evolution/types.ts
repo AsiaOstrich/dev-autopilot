@@ -216,6 +216,36 @@ export interface QualityStrategyAnalysisResult {
   confidence?: "low" | "high";
 }
 
+// ─── 文件飄移偵測（XSPEC-004 Phase 4.5）─────────────────────
+
+/** 飄移項目類型 */
+export type DriftType = "broken_reference" | "stale_standard";
+
+/** 單一飄移項目 */
+export interface DriftItem {
+  /** 包含飄移引用的來源檔案（相對於 cwd） */
+  source_file: string;
+  /** 被引用的目標（路徑或名稱） */
+  reference: string;
+  /** 飄移類型 */
+  drift_type: DriftType;
+  /** 人類可讀說明 */
+  reason: string;
+}
+
+/** 文件飄移偵測結果 */
+export interface DriftAnalysisResult {
+  analyzer: "drift-detector";
+  timestamp: string;
+  /** 掃描的檔案數量 */
+  files_scanned: number;
+  /** 發現的飄移項目 */
+  items: DriftItem[];
+  /** 分析是否因無目標檔案而跳過 */
+  skipped: boolean;
+  skip_reason?: "no_standards_dir";
+}
+
 // ─── 分析日誌 ───────────────────────────────────────────────
 
 /** analysis-log.jsonl 單行 */

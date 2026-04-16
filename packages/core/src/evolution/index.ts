@@ -1,5 +1,5 @@
 /**
- * Evolution 模組（XSPEC-004 Phase 4.1 + 4.2 + 4.3）
+ * Evolution 模組（XSPEC-004 Phase 4.1 + 4.2 + 4.3 + 4.5）
  *
  * - TokenCostAnalyzer：利用執行歷史數據識別異常 token 消耗
  * - HookEfficiencyAnalyzer：讀取 telemetry.jsonl 識別低通過率 hook
@@ -18,6 +18,7 @@ export {
 } from "./proposal-generator.js";
 export { HookEfficiencyProposalGenerator } from "./hook-efficiency-proposal-generator.js";
 export { QualityStrategyProposalGenerator } from "./quality-strategy-proposal-generator.js";
+export { DriftDetector } from "./drift-detector.js";
 export {
   ApprovalManager,
   type ConfirmApplyFn,
