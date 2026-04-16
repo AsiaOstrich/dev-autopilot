@@ -144,3 +144,27 @@ export interface RunArtifacts {
   durationS?: number;
   tokensTotal?: number;
 }
+
+/**
+ * PIU（Pass-in-Use）記憶記錄（XSPEC-059，與 XSPEC-003 US-4 schema 對齊）
+ *
+ * 選填整合：VibeOps 生成的 PIU 可同步寫入 DevAP execution-history，
+ * 讓 XSPEC-004 Phase 4.4 Evolution Analyzer 讀取。
+ */
+export interface PIURecord {
+  id: string;
+  created_at: string;
+  pipeline_run_id: string;
+  profile: string;
+  agent: string;
+  tech_tags: string[];
+  utility: number;
+  summary: string;
+  recommendation: string;
+  preconditions?: string[];
+  limitations?: string[];
+  usage_count: number;
+  last_used_at?: string;
+  /** 來源識別（'vibeops' 表示由 VibeOps 生成） */
+  source?: string;
+}
