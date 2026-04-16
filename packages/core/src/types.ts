@@ -488,6 +488,22 @@ export interface ExecutionReport {
   quality_metrics?: QualityMetrics;
   /** 標準效果回饋（UDS SPEC-SELFDIAG-001） */
   standards_effectiveness?: StandardsEffectivenessReport;
+  /**
+   * Task session 恢復包（XSPEC-050）
+   *
+   * key = task_id，value = 對應的 session_id。
+   * 僅收錄 status 為 success/done_with_concerns 且有 session_id 的 Task。
+   *
+   * 使用方式：
+   * ```typescript
+   * const report1 = await orchestrate(plan, adapter, { signal })
+   * // 取消後重跑，接續對話
+   * const report2 = await orchestrate(plan, adapter, {
+   *   resumeFrom: report1.session_resume_pack,
+   * })
+   * ```
+   */
+  session_resume_pack: Record<string, string>;
 }
 
 /**
@@ -978,6 +994,23 @@ export interface OrchestratorOptions {
    * ```
    */
   readonly emitter?: import("node:events").EventEmitter;
+  /**
+   * 接續包（XSPEC-050）
+   *
+   * 由前一次 `ExecutionReport.session_resume_pack` 取得。
+   * 提供後，Orchestrator 對 pack 中的 task_id 注入對應 sessionId，
+   * 讓 Claude SDK 接續先前的對話脈絡（不需重新生成先前結果）。
+   *
+   * @example
+   * ```typescript
+   * const report1 = await orchestrate(plan, adapter, { signal: ctrl.signal })
+   * // 取消後接續
+   * const report2 = await orchestrate(plan, adapter, {
+   *   resumeFrom: report1.session_resume_pack,
+   * })
+   * ```
+   */
+  readonly resumeFrom?: Record<string, string>;
 }
 
 /**

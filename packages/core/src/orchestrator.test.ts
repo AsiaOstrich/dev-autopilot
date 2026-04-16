@@ -1516,3 +1516,104 @@ describe("XSPEC-049: Orchestrator EventEmitter 結構化事件", () => {
     expect(messages.some(m => m.includes("T-002"))).toBe(true);
   });
 });
+
+describe("XSPEC-050: Session Resume Pack", () => {
+  const resumePlan: TaskPlan = {
+    project: "test-resume",
+    tasks: [
+      { id: "T-001", title: "Setup", spec: "setup spec" },
+      { id: "T-002", title: "Build", spec: "build spec", depends_on: ["T-001"] },
+      { id: "T-003", title: "Test", spec: "test spec", depends_on: ["T-002"] },
+    ],
+  };
+
+  it("AC-1/AC-2: session_resume_pack 只包含 success 且有 session_id 的 Task", async () => {
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => ({
+        task_id: task.id,
+        status: "success",
+        duration_ms: 10,
+        session_id: `sess-${task.id}`,
+      })),
+    });
+
+    const report = await orchestrate(resumePlan, adapter, { cwd: "/tmp/test" });
+
+    expect(report.session_resume_pack).toEqual({
+      "T-001": "sess-T-001",
+      "T-002": "sess-T-002",
+      "T-003": "sess-T-003",
+    });
+  });
+
+  it("AC-2: failed Task 不進入 session_resume_pack", async () => {
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => ({
+        task_id: task.id,
+        status: task.id === "T-001" ? "failed" : "success",
+        duration_ms: 10,
+        session_id: `sess-${task.id}`,
+      })),
+    });
+
+    const report = await orchestrate(resumePlan, adapter, { cwd: "/tmp/test" });
+
+    expect(Object.keys(report.session_resume_pack)).not.toContain("T-001");
+    // T-002 skipped because T-001 failed; T-003 depends on T-002
+    expect(Object.keys(report.session_resume_pack)).toHaveLength(0);
+  });
+
+  it("AC-2: session_id 為 undefined 的 Task 不進入 pack", async () => {
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => ({
+        task_id: task.id,
+        status: "success",
+        duration_ms: 10,
+        // 刻意不設 session_id（部分 adapter 不回傳）
+      })),
+    });
+
+    const report = await orchestrate(resumePlan, adapter, { cwd: "/tmp/test" });
+
+    expect(Object.keys(report.session_resume_pack)).toHaveLength(0);
+  });
+
+  it("AC-3/AC-4: resumeFrom 注入正確 sessionId 給對應 Task", async () => {
+    const capturedSessionIds: Record<string, string | undefined> = {};
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task, opts): Promise<TaskResult> => {
+        capturedSessionIds[task.id] = (opts as { sessionId?: string }).sessionId;
+        return { task_id: task.id, status: "success", duration_ms: 10 };
+      }),
+    });
+
+    await orchestrate(resumePlan, adapter, {
+      cwd: "/tmp/test",
+      resumeFrom: { "T-001": "resume-sess-001", "T-002": "resume-sess-002" },
+    });
+
+    expect(capturedSessionIds["T-001"]).toBe("resume-sess-001");
+    expect(capturedSessionIds["T-002"]).toBe("resume-sess-002");
+    // T-003 不在 resumeFrom 中，不注入 sessionId
+    expect(capturedSessionIds["T-003"]).toBeUndefined();
+  });
+
+  it("AC-5: 不提供 resumeFrom 時行為不變（向後相容）", async () => {
+    const capturedSessionIds: Record<string, string | undefined> = {};
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task, opts): Promise<TaskResult> => {
+        capturedSessionIds[task.id] = (opts as { sessionId?: string }).sessionId;
+        return { task_id: task.id, status: "success", duration_ms: 10 };
+      }),
+    });
+
+    const report = await orchestrate(resumePlan, adapter, {
+      cwd: "/tmp/test",
+      sessionId: "global-session",
+    });
+
+    // 全域 sessionId 傳給每個 Task
+    expect(capturedSessionIds["T-001"]).toBe("global-session");
+    expect(Object.keys(report.session_resume_pack)).toHaveLength(0); // 無 session_id 回傳
+  });
+});

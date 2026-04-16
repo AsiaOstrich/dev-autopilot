@@ -762,9 +762,11 @@ async function executeTaskSimple(
   }
 
   try {
+    // XSPEC-050: 從 resumeFrom 取 sessionId（優先於全域 sessionId）
+    const resumeSessionId = options.resumeFrom?.[task.id];
     const execOpts: ExecuteOptions = {
       cwd: taskCwd,
-      sessionId: options.sessionId,
+      sessionId: resumeSessionId ?? options.sessionId,
       // Fork Mode（XSPEC-038）：forkSession 優先，其次用 task 層設定
       forkSession: forkSession ?? task.fork_session,
       onProgress: options.onProgress,
@@ -881,9 +883,11 @@ async function executeTaskWithQuality(
         // 1. 執行 task
         let taskResult: TaskResult;
         try {
+          // XSPEC-050: 從 resumeFrom 取 sessionId（優先於全域 sessionId）
+          const resumeSessionId = options.resumeFrom?.[task.id];
           const execOpts: ExecuteOptions = {
             cwd: taskCwd,
-            sessionId: options.sessionId,
+            sessionId: resumeSessionId ?? options.sessionId,
             // Fork Mode（XSPEC-038）：forkSession 優先，其次用 task 層設定
             forkSession: forkSession ?? task.fork_session,
             onProgress: options.onProgress,
@@ -1111,7 +1115,16 @@ function buildReport(
   cwd?: string,
 ): ExecutionReport {
   const summary = buildSummary(results, totalDuration);
-  const report: ExecutionReport = { summary, tasks: results };
+
+  // XSPEC-050: 建立 session resume pack
+  const session_resume_pack: Record<string, string> = {};
+  for (const r of results) {
+    if ((r.status === "success" || r.status === "done_with_concerns") && r.session_id) {
+      session_resume_pack[r.task_id] = r.session_id;
+    }
+  }
+
+  const report: ExecutionReport = { summary, tasks: results, session_resume_pack };
 
   // 若啟用品質模式，計算 quality_metrics
   if (qualityConfig && !(
