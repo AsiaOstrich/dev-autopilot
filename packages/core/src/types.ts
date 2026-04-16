@@ -109,39 +109,39 @@ export type TaskStatus =
  */
 export interface Task {
   /** 任務 ID，格式 T-NNN */
-  id: string;
+  readonly id: string;
   /** 任務標題 */
-  title: string;
+  readonly title: string;
   /** 任務規格說明（spec） */
-  spec: string;
+  readonly spec: string;
   /** 依賴的前置任務 ID 列表 */
-  depends_on?: string[];
+  readonly depends_on?: ReadonlyArray<string>;
   /** 指定執行此任務的 agent */
-  agent?: AgentType;
+  readonly agent?: AgentType;
   /** 任務完成後的驗證指令 */
-  verify_command?: string;
+  readonly verify_command?: string;
   /** 最大回合數 */
-  max_turns?: number;
+  readonly max_turns?: number;
   /** 最大預算（美元） */
-  max_budget_usd?: number;
+  readonly max_budget_usd?: number;
   /** 允許使用的工具列表 */
-  allowed_tools?: string[];
+  readonly allowed_tools?: ReadonlyArray<string>;
   /** 是否 fork session 執行（隔離 context） */
-  fork_session?: boolean;
+  readonly fork_session?: boolean;
   /** 是否啟用 Judge Agent 審查此任務的結果 */
-  judge?: boolean;
+  readonly judge?: boolean;
   /** 驗收條件列表，每條是一個可觀察的驗收標準 */
-  acceptance_criteria?: string[];
+  readonly acceptance_criteria?: ReadonlyArray<string>;
   /** 使用者意圖：為什麼需要這個功能 */
-  user_intent?: string;
+  readonly user_intent?: string;
   /** 多層級測試定義（優先於 verify_command） */
-  test_levels?: TestLevel[];
+  readonly test_levels?: ReadonlyArray<TestLevel>;
   /** 建議模型等級（借鑑 Superpowers 模型分級策略） */
-  model_tier?: ModelTier;
+  readonly model_tier?: ModelTier;
   /** 規格品質評分（由 UDS checklist scoring 提供，optional） */
-  spec_score?: number;
+  readonly spec_score?: number;
   /** 規格品質滿分（Standard mode = 10, Boost mode = 25） */
-  spec_max_score?: number;
+  readonly spec_max_score?: number;
   /**
    * 動態激活條件（Activation Predicate）
    *
@@ -151,7 +151,7 @@ export interface Task {
    *
    * 來源：DEC-011 Stigmergy — Activation Predicates
    */
-  activationPredicate?: ActivationPredicate;
+  readonly activationPredicate?: ActivationPredicate;
 }
 
 /**
@@ -205,35 +205,35 @@ export interface TaskPlan {
  */
 export interface TaskResult {
   /** 任務 ID */
-  task_id: string;
+  readonly task_id: string;
   /** 執行時使用的 session ID */
-  session_id?: string;
+  readonly session_id?: string;
   /** 執行狀態 */
-  status: TaskStatus;
+  readonly status: TaskStatus;
   /** 消耗的成本（美元） */
-  cost_usd?: number;
+  readonly cost_usd?: number;
   /** 執行耗時（毫秒） */
-  duration_ms?: number;
+  readonly duration_ms?: number;
   /** 驗證指令是否通過 */
-  verification_passed?: boolean;
+  readonly verification_passed?: boolean;
   /** 錯誤訊息（失敗時） */
-  error?: string;
+  readonly error?: string;
   /** 重試次數（0 = 首次即成功） */
-  retry_count?: number;
+  readonly retry_count?: number;
   /** Judge 審查判決 */
-  judge_verdict?: "APPROVE" | "REJECT";
+  readonly judge_verdict?: "APPROVE" | "REJECT";
   /** 重試總成本（美元） */
-  retry_cost_usd?: number;
+  readonly retry_cost_usd?: number;
   /** 疑慮說明（status 為 done_with_concerns 時） */
-  concerns?: string[];
+  readonly concerns?: ReadonlyArray<string>;
   /** 需要的額外上下文（status 為 needs_context 時） */
-  needed_context?: string;
+  readonly needed_context?: string;
   /** 阻塞原因（status 為 blocked 時） */
-  block_reason?: string;
+  readonly block_reason?: string;
   /** 驗證證據（借鑑 Superpowers Iron Law：Evidence before claims） */
-  verification_evidence?: VerificationEvidence[];
+  readonly verification_evidence?: ReadonlyArray<VerificationEvidence>;
   /** 執行度量（供 activationPredicate threshold 類型讀取，DEC-011） */
-  metrics?: Record<string, number>;
+  readonly metrics?: Record<string, number>;
 }
 
 /**
@@ -241,17 +241,17 @@ export interface TaskResult {
  */
 export interface ExecuteOptions {
   /** 工作目錄 */
-  cwd: string;
+  readonly cwd: string;
   /** 要接續的 session ID */
-  sessionId?: string;
+  readonly sessionId?: string;
   /** 是否 fork session */
-  forkSession?: boolean;
+  readonly forkSession?: boolean;
   /** 進度回呼 */
-  onProgress?: (message: string) => void;
+  readonly onProgress?: (message: string) => void;
   /** 模型等級建議（adapter 可據此選擇不同 model endpoint） */
-  modelTier?: ModelTier;
+  readonly modelTier?: ModelTier;
   /** 品質設定（由 Orchestrator 傳入，adapter 用於生成 hooks） */
-  qualityConfig?: QualityConfig;
+  readonly qualityConfig?: QualityConfig;
 }
 
 /**
@@ -753,27 +753,27 @@ export type CheckpointCallback = (summary: CheckpointSummary) => Promise<Checkpo
  */
 export interface OrchestratorOptions {
   /** 工作目錄 */
-  cwd: string;
+  readonly cwd: string;
   /** 規劃階段的 session ID */
-  sessionId?: string;
+  readonly sessionId?: string;
   /** 進度回呼 */
-  onProgress?: (message: string) => void;
+  readonly onProgress?: (message: string) => void;
   /** 安全 hook 列表 */
-  safetyHooks?: SafetyHook[];
+  readonly safetyHooks?: ReadonlyArray<SafetyHook>;
   /** 是否啟用並行模式 */
-  parallel?: boolean;
+  readonly parallel?: boolean;
   /** 最大並行任務數 */
-  maxParallel?: number;
+  readonly maxParallel?: number;
   /** 品質設定（若提供，啟用 quality gate + fix loop + judge） */
-  qualityConfig?: QualityConfig;
+  readonly qualityConfig?: QualityConfig;
   /** Checkpoint 策略（預設 never） */
-  checkpointPolicy?: CheckpointPolicy;
+  readonly checkpointPolicy?: CheckpointPolicy;
   /** Checkpoint 回呼（checkpoint_policy 非 never 時必須提供） */
-  onCheckpoint?: CheckpointCallback;
+  readonly onCheckpoint?: CheckpointCallback;
   /** 隔離模式（借鑑 Superpowers Git Worktree 隔離執行） */
-  isolation?: "none" | "worktree";
+  readonly isolation?: "none" | "worktree";
   /** 專案原始 CLAUDE.md 路徑（用於 generated_prompt 生成） */
-  existingClaudeMdPath?: string;
+  readonly existingClaudeMdPath?: string;
   /**
    * Fork Mode Cache-Safe 並行（XSPEC-038）
    *
@@ -783,7 +783,7 @@ export interface OrchestratorOptions {
    *
    * 預設 false，不影響現有行為。
    */
-  parallelForkMode?: boolean;
+  readonly parallelForkMode?: boolean;
   /**
    * 啟用串流模式（XSPEC-042）
    *
@@ -793,7 +793,7 @@ export interface OrchestratorOptions {
    *
    * 預設 false，不影響現有行為。
    */
-  streamOutput?: boolean;
+  readonly streamOutput?: boolean;
 }
 
 /**

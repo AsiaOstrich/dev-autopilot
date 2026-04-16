@@ -464,7 +464,7 @@ attack_vectors:
           handlers[event] = handler;
         }),
       };
-      return child as ReturnType<typeof childProcess.spawn>;
+      return child as unknown as ReturnType<typeof childProcess.spawn>;
     });
 
     const { runDualStageJudge } = await import("./judge.js");
@@ -499,7 +499,7 @@ attack_vectors:
         },
         on: vi.fn((event: string, handler: Function) => { handlers[event] = handler; }),
       };
-      return child as ReturnType<typeof childProcess.spawn>;
+      return child as unknown as ReturnType<typeof childProcess.spawn>;
     });
   });
 });

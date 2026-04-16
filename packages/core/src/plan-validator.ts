@@ -247,7 +247,7 @@ export function validatePlan(plan: unknown): ValidationResult {
  * @returns 循環錯誤訊息，無循環時回傳 null
  */
 function detectCycle(tasks: TaskPlan["tasks"]): string | null {
-  const adj = new Map<string, string[]>();
+  const adj = new Map<string, ReadonlyArray<string>>();
   for (const task of tasks) {
     adj.set(task.id, task.depends_on ?? []);
   }

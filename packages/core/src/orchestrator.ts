@@ -630,7 +630,7 @@ async function executeTaskSimple(
       result = await adapter.executeTask(task, execOpts);
     }
 
-    result.duration_ms = result.duration_ms ?? Date.now() - taskStartTime;
+    result = { ...result, duration_ms: result.duration_ms ?? Date.now() - taskStartTime };
 
     // Worktree 合併
     if (worktreeManager && result.status === "success") {
@@ -828,7 +828,7 @@ async function executeTaskWithQuality(
  */
 async function runSafetyHooks(
   task: Task,
-  hooks: SafetyHook[],
+  hooks: ReadonlyArray<SafetyHook>,
 ): Promise<string | null> {
   for (const hook of hooks) {
     const raw = await hook(task);

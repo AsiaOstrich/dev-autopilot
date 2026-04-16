@@ -109,7 +109,7 @@ export function taskResultToEnvelope(
   };
 
   if (result.concerns && result.concerns.length > 0) {
-    envelope.concerns = result.concerns;
+    envelope.concerns = [...result.concerns];
   }
 
   if (result.session_id) {
@@ -123,24 +123,25 @@ export function envelopeToTaskResult(envelope: AgentEnvelope): Partial<TaskResul
   const status = mapUnifiedStatusToDevap(envelope.status);
   const content = envelope.payload?.content ?? {};
 
-  const result: Partial<TaskResult> = {
+  // 使用 mutable 中間物件收集欄位，最後轉型為 Partial<TaskResult>
+  const collected: Record<string, unknown> = {
     task_id: (content.task_id as string) ?? envelope.payload?.artifact_id,
     status,
   };
 
   if (envelope.metadata) {
-    if (typeof envelope.metadata.cost_usd === "number") result.cost_usd = envelope.metadata.cost_usd;
-    if (typeof envelope.metadata.duration_ms === "number") result.duration_ms = envelope.metadata.duration_ms;
-    if (typeof envelope.metadata.retry_count === "number") result.retry_count = envelope.metadata.retry_count;
+    if (typeof envelope.metadata.cost_usd === "number") collected.cost_usd = envelope.metadata.cost_usd;
+    if (typeof envelope.metadata.duration_ms === "number") collected.duration_ms = envelope.metadata.duration_ms;
+    if (typeof envelope.metadata.retry_count === "number") collected.retry_count = envelope.metadata.retry_count;
   }
 
   if (envelope.concerns && envelope.concerns.length > 0) {
-    result.concerns = envelope.concerns;
+    collected.concerns = envelope.concerns;
   }
 
   if (envelope.correlation_id) {
-    result.session_id = envelope.correlation_id;
+    collected.session_id = envelope.correlation_id;
   }
 
-  return result;
+  return collected as Partial<TaskResult>;
 }
