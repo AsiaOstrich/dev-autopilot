@@ -631,8 +631,9 @@ export interface VerificationEvidence {
  *
  * - spec: Spec Compliance — 比對 task spec 與實作產出
  * - quality: Code Quality — 程式碼品質、測試覆蓋、架構一致性
+ * - red_team: Red Team — 攻方視角，找注入向量、邊界條件缺口、競態條件、授權繞過（XSPEC-043）
  */
-export type JudgeReviewStage = "spec" | "quality";
+export type JudgeReviewStage = "spec" | "quality" | "red_team";
 
 /**
  * 結構化除錯回饋（借鑑 Superpowers 四階段除錯法）
@@ -678,6 +679,8 @@ export interface QualityConfig {
   static_analysis_command?: string;
   /** 完成準則（ISO 29119 Test Completion Criteria / Agile DoD） */
   completion_criteria?: CompletionCheck[];
+  /** 是否啟用 Red Team 第三審查階段（預設 false，XSPEC-043） */
+  red_team?: boolean;
 }
 
 /**

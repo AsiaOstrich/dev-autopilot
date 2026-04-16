@@ -5,7 +5,7 @@
  * 實際的 claude -p 呼叫在整合測試中驗證。
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Task, TaskResult } from "./types.js";
 
 // 因為 judge.ts 中使用了 child_process，且核心邏輯（prompt 構建、輸出解析）
@@ -310,5 +310,196 @@ describe("Judge Agent", () => {
     expect(result.verdict).toBe("APPROVE");
     expect(result.reasoning).toBeDefined();
     expect(typeof result.reasoning).toBe("string");
+  });
+});
+
+describe("XSPEC-043: Judge Red Team Mode", () => {
+  const baseTask: Task = {
+    id: "T-043",
+    title: "Red Team 測試任務",
+    spec: "實作使用者認證 API",
+  };
+  const baseTaskResult: TaskResult = {
+    task_id: "T-043",
+    status: "success",
+    cost_usd: 0.5,
+    duration_ms: 3000,
+  };
+
+  it("buildRedTeamPrompt 包含攻方視角關鍵指令", async () => {
+    const { buildRedTeamPrompt } = await import("./judge.js");
+    const prompt = buildRedTeamPrompt(baseTask, baseTaskResult, "diff content");
+    // 驗證攻方視角的關鍵詞都存在（對應 prompt 中實際的文字）
+    expect(prompt).toContain("Injection");   // 輸入驗證（SQL/Command/Path Injection）
+    expect(prompt).toContain("邊界條件");    // 邊界條件
+    expect(prompt).toContain("競態條件");    // 競態條件
+    expect(prompt).toContain("授權繞過");    // 授權繞過
+    expect(prompt).toContain("attack_vectors");
+    expect(prompt).toContain("滲透測試員");
+    expect(prompt).toContain("APPROVE 或 REJECT");
+  });
+
+  it("parseJudgeOutput 正確解析 attack_vectors 陣列（雙階段 YAML 格式）", async () => {
+    const { parseJudgeOutput } = await import("./judge.js");
+    const summaryContent = `verdict: REJECT
+confidence: high
+reasoning: 發現 SQL Injection 漏洞
+attack_vectors:
+  - "SQL Injection via user input in line 42"
+  - "Path Traversal in file upload handler"
+`;
+    const output = JSON.stringify({
+      session_id: "rt-session-001",
+      cost_usd: 0.15,
+      result: `<analysis>
+嘗試 SQL Injection...
+</analysis>
+
+<summary>
+${summaryContent}
+</summary>`,
+    });
+    const result = parseJudgeOutput(output);
+    expect(result.verdict).toBe("REJECT");
+    expect(result.attack_vectors).toBeDefined();
+    expect(result.attack_vectors).toHaveLength(2);
+    expect(result.attack_vectors![0]).toContain("SQL Injection");
+    expect(result.attack_vectors![1]).toContain("Path Traversal");
+  });
+
+  it("parseJudgeOutput 在非 red_team 模式時 attack_vectors 為 undefined", async () => {
+    const { parseJudgeOutput } = await import("./judge.js");
+    const output = JSON.stringify({
+      session_id: "s-002",
+      cost_usd: 0.1,
+      result: `<summary>
+verdict: APPROVE
+confidence: high
+reasoning: 程式碼符合規格
+</summary>`,
+    });
+    const result = parseJudgeOutput(output);
+    expect(result.verdict).toBe("APPROVE");
+    expect(result.attack_vectors).toBeUndefined();
+  });
+
+  it("runDualStageJudge 在 enableRedTeam=false 時 spawn 只被呼叫 2 次", async () => {
+    // 取得 mock spawn 並清除計數
+    const childProcess = await import("node:child_process");
+    const mockSpawn = vi.mocked(childProcess.spawn);
+    mockSpawn.mockClear();
+
+    const { runDualStageJudge } = await import("./judge.js");
+    await runDualStageJudge(baseTask, baseTaskResult, {
+      cwd: "/tmp/test",
+      enableRedTeam: false,
+    });
+
+    // spec + quality 兩階段 = spawn 被呼叫 2 次
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
+  });
+
+  it("runDualStageJudge 在 enableRedTeam=true 時 spawn 被呼叫 3 次", async () => {
+    const childProcess = await import("node:child_process");
+    const mockSpawn = vi.mocked(childProcess.spawn);
+    mockSpawn.mockClear();
+
+    const { runDualStageJudge } = await import("./judge.js");
+    await runDualStageJudge(baseTask, baseTaskResult, {
+      cwd: "/tmp/test",
+      enableRedTeam: true,
+    });
+
+    // spec + quality + red_team 三階段 = spawn 被呼叫 3 次
+    expect(mockSpawn).toHaveBeenCalledTimes(3);
+  });
+
+  it("Red Team REJECT 時整體結果 REJECT 且含 attack_vectors", async () => {
+    const childProcess = await import("node:child_process");
+    const mockSpawn = vi.mocked(childProcess.spawn);
+    mockSpawn.mockClear();
+
+    // 讓第三次呼叫（Red Team）回傳 REJECT + attack_vectors
+    let callCount = 0;
+    mockSpawn.mockImplementation(() => {
+      callCount++;
+      const handlers: Record<string, Function> = {};
+      const isRedTeamCall = callCount === 3;
+      const child = {
+        stdout: {
+          on: vi.fn((event: string, handler: Function) => {
+            handlers[`stdout_${event}`] = handler;
+          }),
+        },
+        stderr: {
+          on: vi.fn((event: string, handler: Function) => {
+            handlers[`stderr_${event}`] = handler;
+          }),
+        },
+        stdin: {
+          write: vi.fn(),
+          end: vi.fn(() => {
+            const resultText = isRedTeamCall
+              ? `<analysis>找到 SQL Injection...</analysis>
+<summary>
+verdict: REJECT
+confidence: high
+reasoning: 發現可利用的 SQL Injection 漏洞
+attack_vectors:
+  - "SQL Injection via userId parameter"
+</summary>`
+              : JSON.stringify({ verdict: "APPROVE", reasoning: "通過" });
+            const output = JSON.stringify({
+              type: "result",
+              subtype: "success",
+              session_id: `session-${callCount}`,
+              cost_usd: 0.1,
+              result: resultText,
+            });
+            handlers["stdout_data"]?.(Buffer.from(output));
+            setTimeout(() => handlers["close"]?.(0), 0);
+          }),
+        },
+        on: vi.fn((event: string, handler: Function) => {
+          handlers[event] = handler;
+        }),
+      };
+      return child as ReturnType<typeof childProcess.spawn>;
+    });
+
+    const { runDualStageJudge } = await import("./judge.js");
+    const result = await runDualStageJudge(baseTask, baseTaskResult, {
+      cwd: "/tmp/test",
+      enableRedTeam: true,
+    });
+
+    expect(result.verdict).toBe("REJECT");
+    expect(result.review_stage).toBe("red_team");
+    expect(result.attack_vectors).toBeDefined();
+    expect(result.attack_vectors![0]).toContain("SQL Injection");
+    expect(result.reasoning).toContain("Red Team:");
+
+    // 還原 mock 到預設行為
+    mockSpawn.mockImplementation(() => {
+      const handlers: Record<string, Function> = {};
+      const child = {
+        stdout: { on: vi.fn((event: string, handler: Function) => { handlers[`stdout_${event}`] = handler; }) },
+        stderr: { on: vi.fn((event: string, handler: Function) => { handlers[`stderr_${event}`] = handler; }) },
+        stdin: {
+          write: vi.fn(),
+          end: vi.fn(() => {
+            const output = JSON.stringify({
+              type: "result", subtype: "success",
+              session_id: "judge-session-001", cost_usd: 0.1,
+              result: JSON.stringify({ verdict: "APPROVE", reasoning: "任務完成，程式碼變更符合規格" }),
+            });
+            handlers["stdout_data"]?.(Buffer.from(output));
+            setTimeout(() => handlers["close"]?.(0), 0);
+          }),
+        },
+        on: vi.fn((event: string, handler: Function) => { handlers[event] = handler; }),
+      };
+      return child as ReturnType<typeof childProcess.spawn>;
+    });
   });
 });

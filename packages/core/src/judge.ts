@@ -54,6 +54,8 @@ export interface JudgeResult {
   criteria_results?: CriteriaResult[];
   /** 使用者意圖達成度評估 */
   intent_assessment?: string;
+  /** Red Team 發現的攻擊向量（僅 red_team 模式，XSPEC-043） */
+  attack_vectors?: string[];
 }
 
 /**
@@ -68,6 +70,8 @@ export interface JudgeOptions {
   maxTurns?: number;
   /** 審查階段（借鑑 Superpowers 雙階段審查：spec 先行，再 quality） */
   reviewStage?: JudgeReviewStage;
+  /** 是否在 DualStage 後追加 Red Team 第三階段（XSPEC-043） */
+  enableRedTeam?: boolean;
 }
 
 /**
@@ -137,7 +141,9 @@ export async function runJudge(
     }
 
     // 構建 Judge prompt
-    const prompt = buildJudgePrompt(task, taskResult, diff, verifyResult, options.reviewStage);
+    const prompt = options.reviewStage === "red_team"
+      ? buildRedTeamPrompt(task, taskResult, diff)
+      : buildJudgePrompt(task, taskResult, diff, verifyResult, options.reviewStage);
 
     // 啟動 Judge 子進程
     const result = await spawnJudge(prompt, options);
@@ -159,13 +165,14 @@ export async function runJudge(
  *
  * 1. Spec Compliance — 比對 task spec 與實作產出，檢查 missing/extra/misunderstood
  * 2. Code Quality — 程式碼品質、測試覆蓋、架構一致性
+ * 3. Red Team（可選，XSPEC-043）— 攻方視角，找注入向量、邊界條件缺口、競態條件、授權繞過
  *
  * Spec 通過才進 Quality 階段。任一階段 REJECT 即停止。
  *
  * @param task - 已完成的任務
  * @param taskResult - 任務執行結果
  * @param options - Judge 選項
- * @returns 雙階段審查結果（回傳最終階段的 JudgeResult）
+ * @returns 審查結果（回傳最終階段的 JudgeResult）
  */
 export async function runDualStageJudge(
   task: Task,
@@ -193,8 +200,40 @@ export async function runDualStageJudge(
   });
   qualityResult.review_stage = "quality";
 
-  // 合併成本
+  // 合併成本（spec + quality）
   qualityResult.cost_usd = (specResult.cost_usd ?? 0) + (qualityResult.cost_usd ?? 0);
+
+  if (qualityResult.verdict === "REJECT") {
+    return qualityResult;
+  }
+
+  // 階段 3（可選）: Red Team（XSPEC-043）
+  if (options.enableRedTeam) {
+    options.onProgress?.(`[${task.id}] 啟動 Judge 審查（Red Team）`);
+    const redTeamResult = await runJudge(task, taskResult, {
+      ...options,
+      reviewStage: "red_team",
+    });
+    redTeamResult.review_stage = "red_team";
+
+    // 任一階段 REJECT → 整體 REJECT
+    if (redTeamResult.verdict === "REJECT") {
+      return {
+        ...qualityResult,
+        verdict: "REJECT",
+        reasoning: `Red Team: ${redTeamResult.reasoning}`,
+        attack_vectors: redTeamResult.attack_vectors,
+        review_stage: "red_team",
+        cost_usd: (qualityResult.cost_usd ?? 0) + (redTeamResult.cost_usd ?? 0),
+      };
+    }
+
+    // Red Team 通過：合併成本並回傳
+    return {
+      ...redTeamResult,
+      cost_usd: (qualityResult.cost_usd ?? 0) + (redTeamResult.cost_usd ?? 0),
+    };
+  }
 
   return qualityResult;
 }
@@ -359,6 +398,55 @@ ${judgingCriteria.join("\n")}`;
 }
 
 /**
+ * 構建 Red Team Judge prompt（XSPEC-043）
+ *
+ * 以攻擊者視角審查實作，找出注入向量、邊界條件缺口、競態條件、授權繞過等安全問題。
+ */
+export function buildRedTeamPrompt(
+  task: Task,
+  _taskResult: TaskResult,
+  diff: string,
+): string {
+  return `你是一位滲透測試員。你的任務是**主動嘗試破壞**以下實作，而非確認它是否正確。
+
+## 原始任務規格
+### ${task.id}: ${task.title}
+${task.spec}
+
+## Git Diff（實作內容）
+\`\`\`diff
+${diff.slice(0, 10000)}
+\`\`\`
+
+## 你的任務
+
+以攻擊者身份，依序審查以下攻擊面：
+
+1. **輸入驗證** — SQL/Command/Path Injection？XSS？不可信輸入直接使用？
+2. **邊界條件** — null/undefined、空陣列、整數溢位、極值能否導致崩潰或繞過邏輯？
+3. **競態條件** — 並行執行時是否有 TOCTOU 或共享狀態問題？
+4. **授權繞過** — 假設呼叫方可信而跳過驗證？可透過構造輸入提升權限？
+5. **資訊洩漏** — Error message 是否暴露敏感資訊、stack trace、內部路徑？
+
+## 輸出格式（必須使用雙階段格式）
+
+<analysis>
+[你的攻擊思考過程，逐項列出你嘗試的攻擊向量]
+</analysis>
+
+<summary>
+verdict: APPROVE 或 REJECT
+confidence: high 或 medium 或 low
+reasoning: 整體判決理由
+attack_vectors:
+  - "SQL Injection via user input in line X"   ← 若有發現，每個向量一行
+</summary>
+
+如果找到任何可利用的漏洞 → verdict: REJECT
+如果完全找不到（說明嘗試了什麼） → verdict: APPROVE`;
+}
+
+/**
  * 啟動 Judge claude -p 子進程
  */
 async function spawnJudge(
@@ -493,6 +581,7 @@ function parseSummaryText(summary: string): {
   reasoning: string;
   criteria_results?: CriteriaResult[];
   intent_assessment?: string;
+  attack_vectors?: string[];
 } | null {
   // 嘗試 YAML-like 格式解析（雙階段輸出）
   const verdictMatch = summary.match(/verdict:\s*(APPROVE|REJECT)/i);
@@ -506,6 +595,17 @@ function parseSummaryText(summary: string): {
     };
     if (confidenceMatch) {
       result.confidence = confidenceMatch[1].toLowerCase() as "high" | "medium" | "low";
+    }
+    // 解析 attack_vectors YAML list（`attack_vectors:` 之後，每行 `  - "..."` 格式）
+    const attackVectorsMatch = summary.match(/attack_vectors:\s*\n((?:\s*-\s*.+\n?)*)/i);
+    if (attackVectorsMatch) {
+      const lines = attackVectorsMatch[1].split("\n");
+      const vectors = lines
+        .map((line) => line.replace(/^\s*-\s*/, "").replace(/^["']|["']$/g, "").trim())
+        .filter((line) => line.length > 0);
+      if (vectors.length > 0) {
+        result.attack_vectors = vectors;
+      }
     }
     return result;
   }
@@ -531,6 +631,9 @@ function parseSummaryText(summary: string): {
     }
     if (typeof jsonParsed.intent_assessment === "string") {
       result.intent_assessment = jsonParsed.intent_assessment;
+    }
+    if (Array.isArray(jsonParsed.attack_vectors)) {
+      result.attack_vectors = jsonParsed.attack_vectors.map(String);
     }
     return result;
   }
@@ -565,6 +668,7 @@ export function parseJudgeOutput(stdout: string): JudgeResult {
       confidence: parsed.confidence,
       criteria_results: parsed.criteria_results,
       intent_assessment: parsed.intent_assessment,
+      attack_vectors: parsed.attack_vectors,
       session_id: sessionId,
       cost_usd: costUsd,
     };
