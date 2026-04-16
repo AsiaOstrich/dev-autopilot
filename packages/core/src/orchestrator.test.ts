@@ -1233,3 +1233,93 @@ describe("XSPEC-038: Fork Mode Cache-Safe Parallel", () => {
     expect(capturedOpts["T-011"]?.forkSession).toBeFalsy();
   });
 });
+
+// ─────────────────────────────────────────────────────────────
+// XSPEC-042: streamOutput 串流模式整合測試
+// ─────────────────────────────────────────────────────────────
+
+describe("orchestrate — streamOutput 串流模式（XSPEC-042）", () => {
+  const streamPlan: TaskPlan = {
+    project: "stream-test",
+    tasks: [{ id: "T-050", title: "Stream task", spec: "Do streaming work" }],
+  };
+
+  it("streamOutput=false（預設）時，使用 executeTask，不呼叫 executeTaskStream", async () => {
+    const executeTaskMock = vi.fn(async (task: Task): Promise<TaskResult> => ({
+      task_id: task.id,
+      status: "success",
+      cost_usd: 0.1,
+      duration_ms: 100,
+    }));
+    const executeTaskStreamMock = vi.fn();
+
+    const adapter = createMockAdapter({
+      executeTask: executeTaskMock,
+      executeTaskStream: executeTaskStreamMock,
+    });
+
+    const report = await orchestrate(streamPlan, adapter, { cwd: "/tmp/test", streamOutput: false });
+
+    expect(report.summary.succeeded).toBe(1);
+    expect(executeTaskMock).toHaveBeenCalledOnce();
+    expect(executeTaskStreamMock).not.toHaveBeenCalled();
+  });
+
+  it("streamOutput=true 且 adapter 有 executeTaskStream 時，使用串流模式", async () => {
+    const streamEvents = [
+      { type: "tool_start" as const, task_id: "T-050", tool_name: "bash" },
+      { type: "tool_end" as const, task_id: "T-050", tool_name: "bash", duration_ms: 100, success: true },
+    ];
+    const finalResult: TaskResult = {
+      task_id: "T-050",
+      status: "success",
+      cost_usd: 0.2,
+      duration_ms: 200,
+    };
+
+    const executeTaskMock = vi.fn();
+    const executeTaskStreamMock = vi.fn(async function* () {
+      for (const event of streamEvents) {
+        yield event;
+      }
+      return finalResult;
+    });
+
+    const adapter = createMockAdapter({
+      executeTask: executeTaskMock,
+      executeTaskStream: executeTaskStreamMock,
+    });
+
+    const progressMessages: string[] = [];
+    const report = await orchestrate(streamPlan, adapter, {
+      cwd: "/tmp/test",
+      streamOutput: true,
+      onProgress: (msg) => progressMessages.push(msg),
+    });
+
+    expect(report.summary.succeeded).toBe(1);
+    expect(executeTaskMock).not.toHaveBeenCalled();
+    expect(executeTaskStreamMock).toHaveBeenCalledOnce();
+    // 驗證 tool_start 訊息被轉發到 onProgress
+    expect(progressMessages.some(m => m.includes("bash"))).toBe(true);
+  });
+
+  it("streamOutput=true 但 adapter 未實作 executeTaskStream 時，退回 executeTask", async () => {
+    const executeTaskMock = vi.fn(async (task: Task): Promise<TaskResult> => ({
+      task_id: task.id,
+      status: "success",
+      cost_usd: 0.15,
+      duration_ms: 150,
+    }));
+
+    // adapter 沒有 executeTaskStream（只有預設的）
+    const adapter = createMockAdapter({ executeTask: executeTaskMock });
+    // 確認沒有 executeTaskStream
+    delete (adapter as Partial<AgentAdapter>).executeTaskStream;
+
+    const report = await orchestrate(streamPlan, adapter, { cwd: "/tmp/test", streamOutput: true });
+
+    expect(report.summary.succeeded).toBe(1);
+    expect(executeTaskMock).toHaveBeenCalledOnce();
+  });
+});

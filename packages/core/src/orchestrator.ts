@@ -34,6 +34,7 @@ import type {
   TaskPlan,
   TaskResult,
   TaskStatus,
+  TaskStreamEvent,
   StandardEffectiveness,
   StandardsEffectivenessReport,
 } from "./types.js";
@@ -610,7 +611,25 @@ async function executeTaskSimple(
       onProgress: options.onProgress,
       modelTier: task.model_tier,
     };
-    const result = await adapter.executeTask(task, execOpts);
+
+    let result: TaskResult;
+
+    // XSPEC-042：串流模式分支
+    if (options.streamOutput && adapter.executeTaskStream) {
+      const gen = adapter.executeTaskStream(task, execOpts);
+      let next: IteratorResult<TaskStreamEvent, TaskResult>;
+      while (!(next = await gen.next()).done) {
+        const event = next.value;
+        if (event.type === "tool_start") {
+          options.onProgress?.(`[${task.id}] ⚙ ${event.tool_name}`);
+        }
+        // 其他事件型態可供未來擴充
+      }
+      result = next.value;
+    } else {
+      result = await adapter.executeTask(task, execOpts);
+    }
+
     result.duration_ms = result.duration_ms ?? Date.now() - taskStartTime;
 
     // Worktree 合併

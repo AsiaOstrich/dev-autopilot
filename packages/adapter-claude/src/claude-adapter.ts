@@ -10,6 +10,8 @@ import type {
   SDKMessage,
   SDKResultMessage,
   SDKSystemMessage,
+  SDKAssistantMessage,
+  SDKToolProgressMessage,
   Options,
 } from "@anthropic-ai/claude-agent-sdk";
 import type {
@@ -18,6 +20,7 @@ import type {
   ExecuteOptions,
   Task,
   TaskResult,
+  TaskStreamEvent,
 } from "@devap/core";
 import {
   generateFullHooksStrategy,
@@ -82,6 +85,122 @@ export class ClaudeAdapter implements AgentAdapter {
       };
     } finally {
       // Phase 3: 清理 hooks 配置（SPEC-009）
+      if (hooksWritten) {
+        await cleanupHarnessConfig(options.cwd);
+      }
+    }
+  }
+
+  /**
+   * 以串流方式執行單一任務（XSPEC-042）
+   *
+   * 暴露 SDK 內部 stream，讓呼叫方即時接收進度事件。
+   * 事件類型：
+   * - tool_start：來自 SDKAssistantMessage 的 tool_use content block
+   * - tool_end：來自 SDKToolProgressMessage（含 elapsed_time_seconds → duration_ms）
+   * - output_chunk：來自 SDKAssistantMessage 的 text content block
+   * - progress：來自 SDKTaskProgressMessage 的 description
+   *
+   * Generator 結束時 return TaskResult（不 yield）。
+   */
+  async *executeTaskStream(
+    task: Task,
+    options: ExecuteOptions,
+  ): AsyncGenerator<TaskStreamEvent, TaskResult> {
+    const startTime = Date.now();
+
+    // 注入 Harness hooks 配置（SPEC-009）
+    const hooksWritten = await this.injectHarnessHooks(task, options);
+
+    const prompt = this.buildPrompt(task);
+    const sdkOptions = this.buildOptions(task, options);
+
+    let sessionId: string | undefined;
+    let resultMessage: SDKResultMessage | undefined;
+
+    // 追蹤工具呼叫開始時間（tool_use_id → start timestamp）
+    const toolStartTimes = new Map<string, number>();
+    let stepCount = 0;
+
+    try {
+      const stream = query({ prompt, options: sdkOptions });
+
+      for await (const message of stream) {
+        // 提取 session_id
+        if (message.type === "system" && message.subtype === "init") {
+          sessionId = (message as SDKSystemMessage).session_id;
+          options.onProgress?.(`[${task.id}] session: ${sessionId}`);
+        }
+
+        // tool_start：從 SDKAssistantMessage 的 content blocks 提取 tool_use
+        if (message.type === "assistant") {
+          const assistantMsg = message as SDKAssistantMessage;
+          const content = assistantMsg.message?.content ?? [];
+          for (const block of content) {
+            if (block.type === "tool_use") {
+              toolStartTimes.set(block.id, Date.now());
+              yield {
+                type: "tool_start",
+                task_id: task.id,
+                tool_name: block.name,
+                tool_input: block.input,
+              };
+            } else if (block.type === "text" && block.text) {
+              yield {
+                type: "output_chunk",
+                task_id: task.id,
+                chunk: block.text,
+              };
+            }
+          }
+        }
+
+        // tool_end：來自 SDKToolProgressMessage
+        if (message.type === "tool_progress") {
+          const toolMsg = message as SDKToolProgressMessage;
+          // 優先使用 SDK 提供的 elapsed_time_seconds（精確），fallback 到 wall clock
+          const elapsedMs = Math.round(toolMsg.elapsed_time_seconds * 1000);
+          const startedAt = toolStartTimes.get(toolMsg.tool_use_id);
+          const wallClockMs = startedAt ? Date.now() - startedAt : 0;
+          const durationMs = elapsedMs > 0 ? elapsedMs : wallClockMs;
+          yield {
+            type: "tool_end",
+            task_id: task.id,
+            tool_name: toolMsg.tool_name,
+            duration_ms: durationMs,
+            success: true,
+          };
+        }
+
+        // progress：來自 SDKTaskProgressMessage
+        if (message.type === "system" && (message as { subtype?: string }).subtype === "task_progress") {
+          const progressMsg = message as { subtype: string; description: string };
+          stepCount++;
+          yield {
+            type: "progress",
+            task_id: task.id,
+            message: progressMsg.description,
+            step: stepCount,
+          };
+        }
+
+        // 捕獲結果訊息
+        if (message.type === "result") {
+          resultMessage = message as SDKResultMessage;
+        }
+      }
+
+      return this.buildResult(task, sessionId, resultMessage, startTime);
+    } catch (error) {
+      return {
+        task_id: task.id,
+        session_id: sessionId,
+        status: "failed",
+        duration_ms: Date.now() - startTime,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      // 清理 hooks 配置（SPEC-009）
       if (hooksWritten) {
         await cleanupHarnessConfig(options.cwd);
       }

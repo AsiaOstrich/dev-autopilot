@@ -414,6 +414,25 @@ export interface ExecutionReport {
 }
 
 /**
+ * 串流任務事件（XSPEC-042）
+ *
+ * TaskStreamEvent 是 executeTaskStream() 回傳的 AsyncGenerator 所 yield 的事件。
+ * 使用 discriminated union，每種事件有獨立的 type 欄位。
+ *
+ * - tool_start：工具呼叫開始（來自 SDKAssistantMessage content 中的 tool_use block）
+ * - tool_end：工具呼叫完成（來自 SDKToolProgressMessage elapsed_time_seconds）
+ * - thinking：思考過程文字片段
+ * - output_chunk：一般文字輸出片段
+ * - progress：進度訊息（來自 SDKTaskProgressMessage 或 SDKStatusMessage）
+ */
+export type TaskStreamEvent =
+  | { type: "tool_start"; task_id: string; tool_name: string; tool_input?: unknown }
+  | { type: "tool_end"; task_id: string; tool_name: string; duration_ms: number; success: boolean }
+  | { type: "thinking"; task_id: string; chunk: string }
+  | { type: "output_chunk"; task_id: string; chunk: string }
+  | { type: "progress"; task_id: string; message: string; step: number; total_steps?: number };
+
+/**
  * Agent Adapter 介面
  *
  * 所有 AI agent adapter 必須實作此介面。
@@ -460,6 +479,23 @@ export interface AgentAdapter {
    * @param sessionId - 要恢復的 session ID
    */
   resumeSession?(sessionId: string): Promise<void>;
+
+  /**
+   * 以串流方式執行單一任務（XSPEC-042，可選實作）
+   *
+   * 與 executeTask() 語意相同，但以 AsyncGenerator 對外暴露內部 SDK stream，
+   * 讓呼叫方可即時接收工具呼叫、文字輸出等進度事件。
+   *
+   * Generator 結束（done: true）時的 return value 即為最終 TaskResult。
+   *
+   * @param task - 要執行的任務
+   * @param options - 執行選項
+   * @returns AsyncGenerator，yield TaskStreamEvent，return TaskResult
+   */
+  executeTaskStream?(
+    task: Task,
+    options: ExecuteOptions,
+  ): AsyncGenerator<TaskStreamEvent, TaskResult>;
 
   /**
    * 能力聲明（XSPEC-037 Fail-Closed 預設）
@@ -745,6 +781,16 @@ export interface OrchestratorOptions {
    * 預設 false，不影響現有行為。
    */
   parallelForkMode?: boolean;
+  /**
+   * 啟用串流模式（XSPEC-042）
+   *
+   * 若 adapter 實作了 executeTaskStream()，則使用串流模式執行 task，
+   * 即時轉發 tool_start 等事件到 onProgress 回呼。
+   * 若 adapter 未實作，退回使用 executeTask()。
+   *
+   * 預設 false，不影響現有行為。
+   */
+  streamOutput?: boolean;
 }
 
 /**
