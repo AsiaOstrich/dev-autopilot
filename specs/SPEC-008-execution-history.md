@@ -1,6 +1,6 @@
 # SPEC-008 執行歷史倉庫（Execution History Repository）
 
-**狀態**: Implemented (Phase 1-3)
+**狀態**: Implemented (Phase 1-4)
 **建立日期**: 2026-04-02
 **作者**: devap team
 **上游規格**: dev-platform XSPEC-003-SDD（Approved）
@@ -427,11 +427,19 @@ export * from "./execution-history/index.js";
 - `packages/core/src/__tests__/execution-history/reader.test.ts`
 - `packages/core/src/__tests__/execution-history/retention.test.ts`
 
-### Phase 4: FileServer Backend（PR #4 — 可延後）
+### Phase 4: FileServer Backend ✅（透過 XSPEC-031 路徑落地，2026-04-15）
 
-**新增/修改檔案：**
-- `packages/core/src/execution-history/storage-backend.ts` — 新增 `FileServerStorageBackend`
-- `packages/core/src/execution-history/storage-config.ts` — storage.json 讀取
+**實作說明：**
+- `FileServerStorageBackend` 已在 `storage-backend.ts` 實作（commit: XSPEC-031）
+- 設計調整：後端設定改由 task plan 的 `execution_history` 欄位控制（`backend: "file_server"` + `telemetryServer` + `telemetryApiKey`），不再需要獨立的 `storage-config.ts`
+- L1 index snapshot 透過 `TelemetryUploader` 上傳，非原先規劃的通用 HTTP FileServer
+
+**落地檔案：**
+- `packages/core/src/execution-history/storage-backend.ts` — `FileServerStorageBackend` ✅
+- `packages/core/src/orchestrator.ts` — backend 選擇邏輯 ✅（line 216-237）
+- `packages/core/src/__tests__/telemetry-integration.test.ts` — AC-1 測試 ✅
+
+**storage-config.ts 決定：** 不再需要，需求已被 task plan 設定取代。
 
 ---
 
