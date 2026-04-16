@@ -506,6 +506,52 @@ export interface ExecutionReport {
    * ```
    */
   session_resume_pack: Record<string, string>;
+  /**
+   * 使用的計劃名稱（XSPEC-057）
+   *
+   * 多計劃格式（MultiPlanFile）時填入選用的 plan 名稱；單計劃格式為 undefined。
+   */
+  plan_name?: string;
+}
+
+/**
+ * 多計劃檔案格式（XSPEC-057）
+ *
+ * 允許單一 YAML/JSON 檔案定義多份具名 TaskPlan。
+ *
+ * ```yaml
+ * defaults:
+ *   quality: standard
+ * default_plan: dev
+ * plans:
+ *   dev:
+ *     project: my-app
+ *     tasks: [...]
+ *   ci:
+ *     project: my-app
+ *     quality: strict
+ *     tasks: [...]
+ * ```
+ */
+export interface MultiPlanFile {
+  /** 共用 defaults（所有 plan 繼承，plan 設定覆蓋） */
+  defaults?: Partial<TaskPlan>;
+  /** 預設計劃名稱（不帶 --plan 時自動選用） */
+  default_plan?: string;
+  /** 具名計劃集合 */
+  plans: Record<string, TaskPlan>;
+}
+
+/**
+ * Plan 檔案型別（單計劃或多計劃格式，XSPEC-057）
+ */
+export type PlanFile = TaskPlan | MultiPlanFile;
+
+/**
+ * 型別守衛：判斷是否為 MultiPlanFile（XSPEC-057）
+ */
+export function isMultiPlanFile(file: PlanFile): file is MultiPlanFile {
+  return "plans" in file && typeof (file as MultiPlanFile).plans === "object" && (file as MultiPlanFile).plans !== null;
 }
 
 /**

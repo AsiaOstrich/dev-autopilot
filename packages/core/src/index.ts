@@ -21,3 +21,5 @@ export type { PackagingTarget, PackagingConfig, Recipe, RecipeStep, PackagingRes
 export { checkBranchDrift, type BranchDriftResult, type BranchDriftStatus, type BranchDriftConfig } from "./branch-drift.js";
 // XSPEC-046: 恢復食譜註冊表
 export { RecoveryRegistry, DEFAULT_RECIPES } from "./recovery-registry.js";
+// XSPEC-057: Multi-Plan Support
+export { loadPlan, listPlans, PlanNotFoundError, MultiPlanFileRequiresPlanFlagError } from "./plan-loader.js";

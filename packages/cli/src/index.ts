@@ -2,10 +2,12 @@
  * devap CLI
  *
  * 用法：
- *   devap run --plan <file> [--agent claude|opencode|cli] [--parallel] [--max-parallel <n>] [--dry-run]
+ *   devap run <file> [--select-plan <name>] [--list-plans]
+ *                    [--agent claude|opencode|cli] [--parallel] [--max-parallel <n>]
+ *                    [--dry-run] [--only <ids>] [--skip <ids>]
  */
 
-import { readFile, access, writeFile, mkdir } from "node:fs/promises";
+import { access, writeFile, mkdir } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { Command } from "commander";
@@ -18,7 +20,10 @@ import {
   orchestrate,
   validatePlan,
   createDefaultSafetyHook,
-  type TaskPlan,
+  loadPlan,
+  listPlans,
+  PlanNotFoundError,
+  MultiPlanFileRequiresPlanFlagError,
   type TaskFilter,
 } from "@devap/core";
 import { createAdapter } from "./adapter-factory.js";
@@ -35,8 +40,10 @@ program
 
 program
   .command("run")
-  .description("執行 task plan")
-  .requiredOption("--plan <file>", "Task plan JSON 檔案路徑")
+  .description("執行 task plan（支援單計劃與多計劃格式，XSPEC-057）")
+  .requiredOption("--plan <file>", "Task plan 檔案路徑（JSON 或 YAML）")
+  .option("--select-plan <name>", "選擇多計劃 YAML 中的具名計劃（XSPEC-057）")
+  .option("--list-plans", "列出檔案中所有計劃名稱並退出（XSPEC-057）")
   .option("--agent <type>", "指定 agent（claude、opencode 或 cli）")
   .option("--parallel", "啟用並行模式（同層 tasks 並行執行）")
   .option("--max-parallel <n>", "最大並行任務數", parseInt)
@@ -45,14 +52,62 @@ program
   .option("--skip <ids>", "跳過這些 task_id（逗號分隔，XSPEC-053）")
   .option("--accept-terms", "靜默合規提醒（等同 DEVAP_ACCEPT_TERMS=1）")
   .option("--verbose", "顯示詳細 onProgress 內部訊息")
-  .action(async (opts: { plan: string; agent?: string; parallel?: boolean; maxParallel?: number; dryRun?: boolean; only?: string; skip?: string; acceptTerms?: boolean; verbose?: boolean }) => {
+  .action(async (opts: {
+    plan: string;
+    selectPlan?: string;
+    listPlans?: boolean;
+    agent?: string;
+    parallel?: boolean;
+    maxParallel?: number;
+    dryRun?: boolean;
+    only?: string;
+    skip?: string;
+    acceptTerms?: boolean;
+    verbose?: boolean;
+  }) => {
     try {
+      const planPath = resolve(opts.plan);
+
+      // XSPEC-057: --list-plans 模式
+      if (opts.listPlans) {
+        const plans = await listPlans(planPath);
+        if (plans === null) {
+          console.log("(single plan — no named plans defined)");
+          return;
+        }
+        console.log(`Available plans in ${opts.plan}:\n`);
+        const maxNameLen = Math.max(...plans.map((p) => p.name.length));
+        for (const p of plans) {
+          const defaultLabel = p.isDefault ? "  (default)" : "           ";
+          const namePadded = p.name.padEnd(maxNameLen);
+          const quality = p.quality ? `  quality: ${p.quality}` : "";
+          console.log(`  ${namePadded}${defaultLabel}  ${p.taskCount} tasks${quality}`);
+        }
+        return;
+      }
+
       // 合規告知（首次執行時顯示，之後靜默）
       checkTermsAccepted(opts.acceptTerms);
-      // 載入 plan
-      const planPath = resolve(opts.plan);
-      const planContent = await readFile(planPath, "utf-8");
-      const plan: TaskPlan = JSON.parse(planContent);
+
+      // XSPEC-057: 統一 loadPlan（支援單計劃 + 多計劃）
+      let plan: Awaited<ReturnType<typeof loadPlan>>["plan"];
+      let selectedPlanName: string | undefined;
+
+      try {
+        const loaded = await loadPlan(planPath, opts.selectPlan);
+        plan = loaded.plan;
+        selectedPlanName = loaded.planName;
+      } catch (err) {
+        if (err instanceof PlanNotFoundError || err instanceof MultiPlanFileRequiresPlanFlagError) {
+          console.error(`❌ ${err.message}`);
+          process.exit(1);
+        }
+        throw err;
+      }
+
+      if (selectedPlanName) {
+        console.log(`📋 使用計劃：${selectedPlanName}`);
+      }
 
       // 驗證 plan
       const validation = validatePlan(plan);
@@ -115,7 +170,8 @@ program
       // 執行
       const mode = opts.parallel ? "並行" : "序列";
       const dryRunLabel = opts.dryRun ? " [DRY-RUN]" : "";
-      console.log(`\n🚀 開始執行（${mode}模式，${plan.tasks.length} 個 Task）${dryRunLabel}...\n`);
+      const planLabel = selectedPlanName ? ` [plan: ${selectedPlanName}]` : "";
+      console.log(`\n🚀 開始執行（${mode}模式，${plan.tasks.length} 個 Task）${dryRunLabel}${planLabel}...\n`);
 
       // XSPEC-049: 結構化進度顯示
       const { emitter, onProgress } = createProgressEmitter(opts.verbose ?? false);
@@ -146,18 +202,23 @@ program
         taskFilter,                     // XSPEC-053
       });
 
+      // XSPEC-057: 注入 plan_name 到 report
+      const reportWithPlan = selectedPlanName
+        ? { ...report, plan_name: selectedPlanName }
+        : report;
+
       // 輸出報告
       console.log("\n📊 執行報告：");
-      console.log(`  總任務：${report.summary.total_tasks}`);
-      console.log(`  成功：${report.summary.succeeded}`);
-      console.log(`  失敗：${report.summary.failed}`);
-      console.log(`  跳過：${report.summary.skipped}`);
-      console.log(`  總成本：$${report.summary.total_cost_usd.toFixed(2)}`);
-      console.log(`  總耗時：${(report.summary.total_duration_ms / 1000).toFixed(1)}s`);
+      console.log(`  總任務：${reportWithPlan.summary.total_tasks}`);
+      console.log(`  成功：${reportWithPlan.summary.succeeded}`);
+      console.log(`  失敗：${reportWithPlan.summary.failed}`);
+      console.log(`  跳過：${reportWithPlan.summary.skipped}`);
+      console.log(`  總成本：$${reportWithPlan.summary.total_cost_usd.toFixed(2)}`);
+      console.log(`  總耗時：${(reportWithPlan.summary.total_duration_ms / 1000).toFixed(1)}s`);
 
       // 寫入報告檔（本地）
       const reportPath = resolve("execution_report.json");
-      await writeFile(reportPath, JSON.stringify(report, null, 2));
+      await writeFile(reportPath, JSON.stringify(reportWithPlan, null, 2));
       console.log(`\n📄 報告已寫入：${reportPath}`);
 
       // XSPEC-054: 儲存 last-report.json 到 ~/.devap/
@@ -166,9 +227,10 @@ program
         await mkdir(devapDir, { recursive: true });
         const lastReportPath = join(devapDir, "last-report.json");
         const reportWithMeta = {
-          ...report,
+          ...reportWithPlan,
           _meta: {
             plan_file: opts.plan,
+            plan_name: selectedPlanName,
             executed_at: new Date().toISOString(),
           },
         };
@@ -192,7 +254,7 @@ program
       }
 
       // 有失敗時回傳非零 exit code
-      if (report.summary.failed > 0) {
+      if (reportWithPlan.summary.failed > 0) {
         process.exit(1);
       }
     } catch (error) {
