@@ -44,6 +44,34 @@ import type {
 } from "./types.js";
 
 /**
+ * XSPEC-051: 建立 OrchestrationRunEvent payload
+ *
+ * 僅包含匿名統計數字，不含 prompt / output / session_id 等敏感內容。
+ */
+function buildOrchestrationRunEvent(
+  plan: TaskPlan,
+  results: TaskResult[],
+  totalDurationMs: number,
+  options: OrchestratorOptions,
+): Record<string, unknown> {
+  return {
+    event_type: "orchestration_run",
+    plan_id: plan.project,
+    task_count: plan.tasks.length,
+    success_count: results.filter((r) => r.status === "success").length,
+    failed_count: results.filter((r) => r.status === "failed").length,
+    cancelled_count: results.filter((r) => r.status === "cancelled").length,
+    done_with_concerns_count: results.filter((r) => r.status === "done_with_concerns").length,
+    skipped_count: results.filter((r) => r.status === "skipped").length,
+    total_duration_ms: totalDurationMs,
+    retry_total: results.reduce((sum, r) => sum + (r.retry_count ?? 0), 0),
+    has_quality_gate: !!options.qualityConfig,
+    parallel_mode: options.parallel === true,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
  * XSPEC-049: 結構化事件發射輔助函式
  *
  * 避免在每個 emit 呼叫點重複 null 檢查。
@@ -301,6 +329,12 @@ export async function orchestrate(
     // SPEC-012: fire-and-forget L1 index snapshot 上傳（不阻塞主流程）
     if (fileServerBackend) {
       fileServerBackend.uploadIndexSnapshot().catch(() => {});
+    }
+
+    // XSPEC-051: fire-and-forget 執行摘要遙測上傳
+    if (wrappedOptions.orchestrationTelemetry) {
+      const event = buildOrchestrationRunEvent(plan, results, Date.now() - startTime, wrappedOptions);
+      wrappedOptions.orchestrationTelemetry.upload(event).catch(() => {});
     }
 
     return report;

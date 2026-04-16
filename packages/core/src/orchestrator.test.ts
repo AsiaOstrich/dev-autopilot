@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { orchestrate, topologicalSort, topologicalLayers } from "./orchestrator.js";
-import type { AgentAdapter, CheckpointSummary, OrchestratorEvent, QualityConfig, Task, TaskPlan, TaskResult, ExecuteOptions } from "./types.js";
+import type { AgentAdapter, CheckpointSummary, OrchestrationTelemetryClient, OrchestratorEvent, QualityConfig, Task, TaskPlan, TaskResult, ExecuteOptions } from "./types.js";
 
 /** 建立 mock adapter */
 function createMockAdapter(
@@ -1615,5 +1615,106 @@ describe("XSPEC-050: Session Resume Pack", () => {
     // 全域 sessionId 傳給每個 Task
     expect(capturedSessionIds["T-001"]).toBe("global-session");
     expect(Object.keys(report.session_resume_pack)).toHaveLength(0); // 無 session_id 回傳
+  });
+});
+
+// ============================================================
+// XSPEC-051: Orchestrator Run Telemetry
+// ============================================================
+
+describe("XSPEC-051: Orchestrator Run Telemetry", () => {
+  const telemetryPlan: TaskPlan = {
+    project: "test-telemetry",
+    tasks: [
+      { id: "T-001", title: "Task 1", spec: "Do 1" },
+      { id: "T-002", title: "Task 2", spec: "Do 2" },
+      { id: "T-003", title: "Task 3", spec: "Do 3" },
+    ],
+  };
+
+  function createTelemetryAdapter(statuses: ("success" | "failed")[]): AgentAdapter {
+    let callIdx = 0;
+    return createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => {
+        const status = statuses[callIdx++] ?? "success";
+        if (status === "failed") {
+          return { task_id: task.id, status: "failed", duration_ms: 10, error: "err" };
+        }
+        return { task_id: task.id, status: "success", duration_ms: 10, retry_count: callIdx - 1 };
+      }),
+    });
+  }
+
+  it("AC-3/AC-4: orchestrate() 完成後 upload() 被呼叫，payload 包含規定欄位", async () => {
+    const mockUpload = vi.fn().mockResolvedValue(undefined);
+    const telemetry: OrchestrationTelemetryClient = { upload: mockUpload };
+    const adapter = createTelemetryAdapter(["success", "success", "failed"]);
+
+    await orchestrate(telemetryPlan, adapter, {
+      cwd: "/tmp/test",
+      orchestrationTelemetry: telemetry,
+    });
+
+    expect(mockUpload).toHaveBeenCalledOnce();
+    const payload = mockUpload.mock.calls[0][0] as Record<string, unknown>;
+
+    expect(payload["event_type"]).toBe("orchestration_run");
+    expect(payload["plan_id"]).toBe("test-telemetry");
+    expect(payload["task_count"]).toBe(3);
+    expect(payload["success_count"]).toBe(2);
+    expect(payload["failed_count"]).toBe(1);
+    expect(payload["cancelled_count"]).toBe(0);
+    expect(payload["total_duration_ms"]).toBeGreaterThanOrEqual(0);
+    expect(payload["has_quality_gate"]).toBe(false);
+    expect(payload["parallel_mode"]).toBe(false);
+    expect(typeof payload["timestamp"]).toBe("string");
+    // 不含敏感欄位
+    expect(payload["session_id"]).toBeUndefined();
+    expect(payload["prompt"]).toBeUndefined();
+    expect(payload["output"]).toBeUndefined();
+  });
+
+  it("AC-5: upload() 拋出錯誤時 orchestrate() 正常完成", async () => {
+    const mockUpload = vi.fn().mockRejectedValue(new Error("network error"));
+    const telemetry: OrchestrationTelemetryClient = { upload: mockUpload };
+    const adapter = createTelemetryAdapter(["success", "success", "success"]);
+
+    // 不應 throw
+    const report = await orchestrate(telemetryPlan, adapter, {
+      cwd: "/tmp/test",
+      orchestrationTelemetry: telemetry,
+    });
+
+    expect(report.summary.succeeded).toBe(3);
+    expect(mockUpload).toHaveBeenCalledOnce();
+  });
+
+  it("AC-6: 不提供 orchestrationTelemetry 時，upload() 不被呼叫", async () => {
+    const mockUpload = vi.fn();
+    const adapter = createTelemetryAdapter(["success", "success", "success"]);
+
+    const report = await orchestrate(telemetryPlan, adapter, {
+      cwd: "/tmp/test",
+      // 刻意不傳 orchestrationTelemetry
+    });
+
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(report.summary.succeeded).toBe(3);
+  });
+
+  it("AC-4 parallel_mode: parallel=true 時 parallel_mode=true", async () => {
+    const mockUpload = vi.fn().mockResolvedValue(undefined);
+    const telemetry: OrchestrationTelemetryClient = { upload: mockUpload };
+    const adapter = createTelemetryAdapter(["success", "success", "success"]);
+
+    await orchestrate(telemetryPlan, adapter, {
+      cwd: "/tmp/test",
+      parallel: true,
+      orchestrationTelemetry: telemetry,
+    });
+
+    expect(mockUpload).toHaveBeenCalledOnce();
+    const payload = mockUpload.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload["parallel_mode"]).toBe(true);
   });
 });
