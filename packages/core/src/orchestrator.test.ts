@@ -1718,3 +1718,171 @@ describe("XSPEC-051: Orchestrator Run Telemetry", () => {
     expect(payload["parallel_mode"]).toBe(true);
   });
 });
+
+// ─── XSPEC-052: dryRun 模式 ────────────────────────────────────────────────
+
+describe("XSPEC-052: dryRun 模式", () => {
+  const dryPlan: TaskPlan = {
+    project: "dry-test",
+    tasks: [
+      { id: "T-010", title: "Step A", spec: "Do A" },
+      { id: "T-011", title: "Step B", spec: "Do B", depends_on: ["T-010"] },
+      { id: "T-012", title: "Step C", spec: "Do C", depends_on: ["T-011"] },
+    ],
+  };
+
+  it("dryRun: true 時不呼叫 adapter.executeTask", async () => {
+    const adapter = createMockAdapter();
+    await orchestrate(dryPlan, adapter, { cwd: "/tmp/test", dryRun: true });
+    expect(adapter.executeTask).not.toHaveBeenCalled();
+  });
+
+  it("dryRun: true 時所有 task status === 'skipped'", async () => {
+    const adapter = createMockAdapter();
+    const report = await orchestrate(dryPlan, adapter, { cwd: "/tmp/test", dryRun: true });
+    for (const task of report.tasks) {
+      expect(task.status).toBe("skipped");
+    }
+  });
+
+  it("dryRun: true 時 report.dry_run === true", async () => {
+    const adapter = createMockAdapter();
+    const report = await orchestrate(dryPlan, adapter, { cwd: "/tmp/test", dryRun: true });
+    expect(report.dry_run).toBe(true);
+  });
+
+  it("dryRun: true 時第一個 task 的 error 包含 'dry-run'", async () => {
+    const adapter = createMockAdapter();
+    const report = await orchestrate(dryPlan, adapter, { cwd: "/tmp/test", dryRun: true });
+    // T-010 沒有依賴，一定是 dry-run skip
+    const t010 = report.tasks.find((t) => t.task_id === "T-010");
+    expect(t010?.error).toContain("dry-run");
+  });
+
+  it("dryRun: false（預設）時正常執行所有 tasks", async () => {
+    const adapter = createMockAdapter();
+    const report = await orchestrate(dryPlan, adapter, { cwd: "/tmp/test" });
+    expect(adapter.executeTask).toHaveBeenCalledTimes(3);
+    expect(report.dry_run).toBeUndefined();
+    expect(report.summary.succeeded).toBe(3);
+  });
+
+  it("dryRun: true 並行模式時所有 task 也應為 skipped", async () => {
+    const adapter = createMockAdapter();
+    const report = await orchestrate(dryPlan, adapter, {
+      cwd: "/tmp/test",
+      dryRun: true,
+      parallel: true,
+    });
+    expect(adapter.executeTask).not.toHaveBeenCalled();
+    for (const task of report.tasks) {
+      expect(task.status).toBe("skipped");
+    }
+    expect(report.dry_run).toBe(true);
+  });
+});
+
+// ─── XSPEC-053: TaskFilter ──────────────────────────────────────────────────
+
+describe("XSPEC-053: TaskFilter", () => {
+  const filterPlan: TaskPlan = {
+    project: "filter-test",
+    tasks: [
+      { id: "T-020", title: "Task A", spec: "A" },
+      { id: "T-021", title: "Task B", spec: "B" },
+      { id: "T-022", title: "Task C", spec: "C" },
+      { id: "T-023", title: "Task D", spec: "D" },
+    ],
+  };
+
+  it("only 模式只執行指定 task", async () => {
+    const adapter = createMockAdapter();
+    const report = await orchestrate(filterPlan, adapter, {
+      cwd: "/tmp/test",
+      taskFilter: { only: ["T-020", "T-022"] },
+    });
+
+    // 只有 T-020 和 T-022 應該被執行（success），其他 skipped
+    const executed = report.tasks.filter((t) => t.status === "success");
+    const skipped = report.tasks.filter((t) => t.status === "skipped");
+    expect(executed.map((t) => t.task_id).sort()).toEqual(["T-020", "T-022"]);
+    expect(skipped.map((t) => t.task_id).sort()).toEqual(["T-021", "T-023"]);
+  });
+
+  it("skip 模式跳過指定 task", async () => {
+    const adapter = createMockAdapter();
+    const report = await orchestrate(filterPlan, adapter, {
+      cwd: "/tmp/test",
+      taskFilter: { skip: ["T-021", "T-023"] },
+    });
+
+    const executed = report.tasks.filter((t) => t.status === "success");
+    const skipped = report.tasks.filter((t) => t.status === "skipped");
+    expect(executed.map((t) => t.task_id).sort()).toEqual(["T-020", "T-022"]);
+    expect(skipped.map((t) => t.task_id).sort()).toEqual(["T-021", "T-023"]);
+  });
+
+  it("only 優先於 skip（同時提供時）", async () => {
+    const adapter = createMockAdapter();
+    const warnMessages: string[] = [];
+    const report = await orchestrate(filterPlan, adapter, {
+      cwd: "/tmp/test",
+      onProgress: (msg) => warnMessages.push(msg),
+      taskFilter: {
+        only: ["T-020"],
+        skip: ["T-020", "T-021"], // skip T-020，但 only 優先
+      },
+    });
+
+    // only 優先 → T-020 應被執行
+    const t020 = report.tasks.find((t) => t.task_id === "T-020");
+    expect(t020?.status).toBe("success");
+
+    // 應輸出 warning
+    expect(warnMessages.some((m) => m.includes("[WARN]") && m.includes("only"))).toBe(true);
+  });
+
+  it("不存在的 task_id 在 only 中應觸發 warning", async () => {
+    const adapter = createMockAdapter();
+    const warnMessages: string[] = [];
+    await orchestrate(filterPlan, adapter, {
+      cwd: "/tmp/test",
+      onProgress: (msg) => warnMessages.push(msg),
+      taskFilter: { only: ["T-020", "T-999"] },
+    });
+
+    expect(
+      warnMessages.some(
+        (m) => m.includes("[WARN]") && m.includes("T-999"),
+      ),
+    ).toBe(true);
+  });
+
+  it("不存在的 task_id 在 skip 中應觸發 warning", async () => {
+    const adapter = createMockAdapter();
+    const warnMessages: string[] = [];
+    await orchestrate(filterPlan, adapter, {
+      cwd: "/tmp/test",
+      onProgress: (msg) => warnMessages.push(msg),
+      taskFilter: { skip: ["T-020", "T-998"] },
+    });
+
+    expect(
+      warnMessages.some(
+        (m) => m.includes("[WARN]") && m.includes("T-998"),
+      ),
+    ).toBe(true);
+  });
+
+  it("被過濾 task 的 error 包含 'task-filter'", async () => {
+    const adapter = createMockAdapter();
+    const report = await orchestrate(filterPlan, adapter, {
+      cwd: "/tmp/test",
+      taskFilter: { skip: ["T-021"] },
+    });
+
+    const t021 = report.tasks.find((t) => t.task_id === "T-021");
+    expect(t021?.status).toBe("skipped");
+    expect(t021?.error).toContain("task-filter");
+  });
+});

@@ -35,6 +35,7 @@ import type {
   ResolvedTask,
   SafetyHook,
   Task,
+  TaskFilter,
   TaskPlan,
   TaskResult,
   TaskStatus,
@@ -306,6 +307,11 @@ export async function orchestrate(
     wrappedOptions.onProgress?.("啟用 Worktree 隔離模式");
   }
 
+  // XSPEC-053: 驗證 taskFilter 中不存在的 task_id
+  if (wrappedOptions.taskFilter) {
+    warnUnknownTaskIds(plan, wrappedOptions.taskFilter, wrappedOptions.onProgress);
+  }
+
   // 6. 選擇執行模式
   try {
     let results: TaskResult[];
@@ -315,7 +321,7 @@ export async function orchestrate(
       results = await orchestrateSequential(plan, adapter, wrappedOptions, worktreeManager, resolvedTaskMap, historyWriter, logCollector);
     }
 
-    const report = buildReport(results, Date.now() - startTime, wrappedOptions.qualityConfig, wrappedOptions.cwd);
+    const report = buildReport(results, Date.now() - startTime, wrappedOptions.qualityConfig, wrappedOptions.cwd, wrappedOptions.dryRun);
 
     // XSPEC-049: orchestrator:complete 事件
     emitEvent(wrappedOptions, {
@@ -707,6 +713,50 @@ async function executeOneTask(
         error: `activation predicate not met: ${desc}`,
       };
     }
+  }
+
+  // XSPEC-053: Task Filter 篩選（taskFilter 優先於 dryRun，先過濾）
+  if (options.taskFilter) {
+    const filterResult = isTaskFiltered(task.id, options.taskFilter, options.onProgress);
+    if (filterResult) {
+      options.onProgress?.(`[${task.id}] 跳過（task-filter）：${filterResult}`);
+      emitEvent(options, {
+        type: "task:skipped",
+        task_id: task.id,
+        reason: `task-filter: ${filterResult}`,
+        timestamp: new Date().toISOString(),
+      });
+      return {
+        task_id: task.id,
+        status: "skipped",
+        duration_ms: 0,
+        error: `task-filter: ${filterResult}`,
+      };
+    }
+  }
+
+  // XSPEC-052: Dry-run 模式：跳過實際執行，直接回傳 skipped
+  if (options.dryRun) {
+    options.onProgress?.(`[${task.id}] [DRY-RUN] 跳過：${task.title}`);
+    emitEvent(options, {
+      type: "task:start",
+      task_id: task.id,
+      title: task.title,
+      timestamp: new Date().toISOString(),
+    });
+    emitEvent(options, {
+      type: "task:skipped",
+      task_id: task.id,
+      reason: "dry-run",
+      timestamp: new Date().toISOString(),
+    });
+    return {
+      task_id: task.id,
+      status: "skipped",
+      duration_ms: 0,
+      cost_usd: 0,
+      error: "dry-run",
+    };
   }
 
   // 執行 safety hooks
@@ -1142,11 +1192,70 @@ async function handleCheckpoint(
 /**
  * 彙整執行報告（含品質指標）
  */
+/**
+ * XSPEC-053: 判斷 task 是否應被過濾
+ *
+ * @returns 若應過濾，回傳過濾原因字串；若不過濾，回傳 undefined
+ */
+function isTaskFiltered(
+  taskId: string,
+  filter: TaskFilter,
+  onProgress?: (message: string) => void,
+): string | undefined {
+  const hasOnly = filter.only && filter.only.length > 0;
+  const hasSkip = filter.skip && filter.skip.length > 0;
+
+  // only 與 skip 同時存在 → only 優先，輸出 warning
+  if (hasOnly && hasSkip) {
+    onProgress?.(`[WARN] taskFilter.only 與 taskFilter.skip 同時提供，only 優先`);
+  }
+
+  if (hasOnly) {
+    // 不在 only 白名單中 → 過濾
+    if (!filter.only!.includes(taskId)) {
+      return `不在 taskFilter.only 白名單中`;
+    }
+    return undefined;
+  }
+
+  if (hasSkip) {
+    // 在 skip 黑名單中 → 過濾
+    if (filter.skip!.includes(taskId)) {
+      return `在 taskFilter.skip 黑名單中`;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * XSPEC-053: 驗證 taskFilter 中不存在的 task_id，輸出 warning
+ */
+function warnUnknownTaskIds(
+  plan: TaskPlan,
+  filter: TaskFilter,
+  onProgress?: (message: string) => void,
+): void {
+  const allIds = new Set(plan.tasks.map((t) => t.id));
+
+  for (const id of filter.only ?? []) {
+    if (!allIds.has(id)) {
+      onProgress?.(`[WARN] taskFilter.only includes unknown task_id: "${id}"`);
+    }
+  }
+  for (const id of filter.skip ?? []) {
+    if (!allIds.has(id)) {
+      onProgress?.(`[WARN] taskFilter.skip includes unknown task_id: "${id}"`);
+    }
+  }
+}
+
 function buildReport(
   results: TaskResult[],
   totalDuration: number,
   qualityConfig?: QualityConfig,
   cwd?: string,
+  isDryRun?: boolean,
 ): ExecutionReport {
   const summary = buildSummary(results, totalDuration);
 
@@ -1158,7 +1267,12 @@ function buildReport(
     }
   }
 
-  const report: ExecutionReport = { summary, tasks: results, session_resume_pack };
+  const report: ExecutionReport = {
+    summary,
+    tasks: results,
+    session_resume_pack,
+    ...(isDryRun ? { dry_run: true } : {}),
+  };
 
   // 若啟用品質模式，計算 quality_metrics
   if (qualityConfig && !(

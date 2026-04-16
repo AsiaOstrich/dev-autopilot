@@ -488,6 +488,8 @@ export interface ExecutionReport {
   quality_metrics?: QualityMetrics;
   /** 標準效果回饋（UDS SPEC-SELFDIAG-001） */
   standards_effectiveness?: StandardsEffectivenessReport;
+  /** 是否為 dry-run 預覽（XSPEC-052） */
+  readonly dry_run?: boolean;
   /**
    * Task session 恢復包（XSPEC-050）
    *
@@ -927,6 +929,16 @@ export type OrchestratorEvent =
     };
 
 /**
+ * Task 篩選器（XSPEC-053）
+ */
+export interface TaskFilter {
+  /** 白名單：只執行這些 task_id（其餘 skip）；與 skip 互斥，only 優先 */
+  readonly only?: ReadonlyArray<string>;
+  /** 黑名單：跳過這些 task_id（其餘正常執行） */
+  readonly skip?: ReadonlyArray<string>;
+}
+
+/**
  * 編排器選項
  */
 export interface OrchestratorOptions {
@@ -1037,6 +1049,23 @@ export interface OrchestratorOptions {
    * ```
    */
   readonly orchestrationTelemetry?: OrchestrationTelemetryClient;
+  /**
+   * 乾燒（預覽）模式（XSPEC-052）
+   *
+   * 啟用時 Orchestrator 解析計畫、驗證 Task 結構，
+   * 但不呼叫 AgentAdapter.executeTask()，
+   * 所有 Task 狀態設為 "skipped"，並在 ExecutionReport.dry_run 標記 true。
+   *
+   * 預設 false，不影響現有行為。
+   */
+  readonly dryRun?: boolean;
+  /**
+   * Task 篩選器（XSPEC-053）
+   *
+   * only 與 skip 互斥，若同時提供，only 優先。
+   * 被過濾掉的 Task 狀態設為 "skipped"，reason="task-filter"。
+   */
+  readonly taskFilter?: TaskFilter;
 }
 
 /**
