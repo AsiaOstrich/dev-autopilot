@@ -13,6 +13,7 @@ import { registerInitCommand } from "./commands/init.js";
 import { registerSyncStandardsCommand } from "./commands/sync-standards.js";
 import { registerPackageCommand } from "./commands/package.js";
 import { registerReportCommand } from "./commands/report.js";
+import { registerEvolutionCommand } from "./commands/evolution.js";
 import {
   orchestrate,
   validatePlan,
@@ -189,6 +190,7 @@ program
 registerInitCommand(program);
 registerSyncStandardsCommand(program);
 registerPackageCommand(program);
-registerReportCommand(program); // XSPEC-054
+registerReportCommand(program);         // XSPEC-054
+registerEvolutionCommand(program);      // XSPEC-004
 
 program.parse();

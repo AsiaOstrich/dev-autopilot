@@ -14,6 +14,7 @@ export {
   serializeProposal,
   parseProposal,
 } from "./proposal-generator.js";
+export { HookEfficiencyProposalGenerator } from "./hook-efficiency-proposal-generator.js";
 export {
   ApprovalManager,
   type ConfirmApplyFn,
