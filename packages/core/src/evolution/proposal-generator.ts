@@ -37,8 +37,22 @@ function formatTags(tags: string[]): string {
 }
 
 /** 產生單一提案的 Markdown body */
-function buildProposalBody(outlier: Outlier, analysisTimestamp: string): string {
+function buildProposalBody(
+  outlier: Outlier,
+  analysisTimestamp: string,
+  confidence: "low" | "high",
+  totalSamples: number,
+): string {
+  const lowConfidenceWarning =
+    confidence === "low"
+      ? [
+          `> ⚠️ **[LOW CONFIDENCE]** 此提案基於 ${totalSamples} 筆樣本（< 50），僅供參考，建議累積更多數據後重新分析。`,
+          ``,
+        ]
+      : [];
+
   const lines: string[] = [
+    ...lowConfidenceWarning,
     `## 問題描述`,
     ``,
     `任務 \`${outlier.task_id}\` 的平均 token 消耗（${outlier.actual_tokens.toLocaleString()} tokens）`,
@@ -198,7 +212,12 @@ export class ProposalGenerator {
         analysis_ref: analysis.timestamp,
       };
 
-      const body = buildProposalBody(outlier, analysis.timestamp);
+      const body = buildProposalBody(
+        outlier,
+        analysis.timestamp,
+        analysis.confidence ?? "high",
+        analysis.total_tasks_scanned,
+      );
       const proposal: Proposal = { meta, body };
 
       // 寫入 .evolution/proposals/
@@ -260,6 +279,7 @@ export class ProposalGenerator {
       total_tasks_scanned: analysis.total_tasks_scanned,
       outliers_found: analysis.outliers.length,
       proposals_generated: proposalsGenerated,
+      confidence: analysis.confidence,
     };
 
     const logPath = "history/analysis-log.jsonl";

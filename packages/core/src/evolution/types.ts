@@ -76,6 +76,13 @@ export interface AnalysisResult {
   /** 分析是否因樣本不足而跳過 */
   skipped: boolean;
   skip_reason?: "insufficient_samples";
+  /**
+   * 分析信心等級（XSPEC-004 Phase 4.1 update）
+   * - "low"：5–49 筆樣本，建議謹慎參考
+   * - "high"：50+ 筆樣本，可信度足夠
+   * - undefined：skipped（不足 5 筆）
+   */
+  confidence?: "low" | "high";
 }
 
 // ─── 提案 ─────────────────────────────────────────────────
@@ -125,4 +132,6 @@ export interface AnalysisLogEntry {
   total_tasks_scanned: number;
   outliers_found: number;
   proposals_generated: number;
+  /** 分析信心等級（XSPEC-004 Phase 4.1 update） */
+  confidence?: "low" | "high";
 }

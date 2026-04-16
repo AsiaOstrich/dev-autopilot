@@ -88,10 +88,19 @@ export class TokenCostAnalyzer {
       });
     }
 
-    // 樣本數不足
-    if (records.length < this.config.min_samples) {
+    // 漸進式信心等級（XSPEC-004 Phase 4.1 update）
+    // < 5 筆：完全跳過
+    // 5–49 筆：low confidence
+    // 50+ 筆：high confidence
+    const ABSOLUTE_MIN = 5;
+    const HIGH_CONFIDENCE_MIN = 50;
+
+    if (records.length < ABSOLUTE_MIN) {
       return this.skippedResult(now, records.length);
     }
+
+    const confidence: "low" | "high" =
+      records.length >= HIGH_CONFIDENCE_MIN ? "high" : "low";
 
     // 按 tags + quality 分組
     const groupMap = new Map<string, { key: GroupKey; records: TaskTokenRecord[] }>();
@@ -157,6 +166,7 @@ export class TokenCostAnalyzer {
       groups,
       outliers,
       skipped: false,
+      confidence,
     };
   }
 

@@ -68,7 +68,7 @@ describe("TokenCostAnalyzer", () => {
       expect(result.groups).toHaveLength(0);
     });
 
-    it("樣本不足 min_samples 時應回傳 skipped", async () => {
+    it("樣本數 < 5 時應回傳 skipped（絕對最低門檻）", async () => {
       const index = makeIndex([
         { id: "T-001", tags: ["backend"], status: "success" },
       ]);
@@ -86,14 +86,69 @@ describe("TokenCostAnalyzer", () => {
       expect(result.skipped).toBe(true);
       expect(result.skip_reason).toBe("insufficient_samples");
       expect(result.total_tasks_scanned).toBe(1);
+      expect(result.confidence).toBeUndefined();
+    });
+
+    it("樣本數 5–49 應回傳 confidence: low", async () => {
+      // 建立 10 筆樣本
+      const tasks = Array.from({ length: 10 }, (_, i) => ({
+        id: `T-${String(i + 1).padStart(3, "0")}`,
+        tags: ["api"],
+        status: "success" as const,
+      }));
+      const index = makeIndex(tasks);
+
+      const backend = createMockBackend({
+        readFile: vi.fn(async (path: string) => {
+          if (path === "index.json") return JSON.stringify(index);
+          const match = path.match(/^(T-\d+)\/manifest\.json$/);
+          if (match) return JSON.stringify(makeManifest(match[1]!, 1000));
+          return null;
+        }),
+      });
+
+      const analyzer = new TokenCostAnalyzer(backend, defaultConfig);
+      const result = await analyzer.analyze();
+
+      expect(result.skipped).toBe(false);
+      expect(result.confidence).toBe("low");
+      expect(result.total_tasks_scanned).toBe(10);
+    });
+
+    it("樣本數 50+ 應回傳 confidence: high", async () => {
+      // 建立 60 筆樣本
+      const tasks = Array.from({ length: 60 }, (_, i) => ({
+        id: `T-${String(i + 1).padStart(3, "0")}`,
+        tags: ["api"],
+        status: "success" as const,
+      }));
+      const index = makeIndex(tasks);
+
+      const backend = createMockBackend({
+        readFile: vi.fn(async (path: string) => {
+          if (path === "index.json") return JSON.stringify(index);
+          const match = path.match(/^(T-\d+)\/manifest\.json$/);
+          if (match) return JSON.stringify(makeManifest(match[1]!, 1000));
+          return null;
+        }),
+      });
+
+      const analyzer = new TokenCostAnalyzer(backend, defaultConfig);
+      const result = await analyzer.analyze();
+
+      expect(result.skipped).toBe(false);
+      expect(result.confidence).toBe("high");
+      expect(result.total_tasks_scanned).toBe(60);
     });
 
     it("應正確分組並計算統計", async () => {
+      // 使用 5 筆以上確保超過 ABSOLUTE_MIN
       const index = makeIndex([
         { id: "T-001", tags: ["backend"], status: "success" },
         { id: "T-002", tags: ["backend"], status: "success" },
         { id: "T-003", tags: ["backend"], status: "success" },
         { id: "T-004", tags: ["frontend"], status: "success" },
+        { id: "T-005", tags: ["frontend"], status: "success" },
       ]);
 
       const manifests: Record<string, number> = {
@@ -101,6 +156,7 @@ describe("TokenCostAnalyzer", () => {
         "T-002": 1200,
         "T-003": 1100,
         "T-004": 500,
+        "T-005": 550,
       };
 
       const backend = createMockBackend({
@@ -117,8 +173,9 @@ describe("TokenCostAnalyzer", () => {
       const result = await analyzer.analyze();
 
       expect(result.skipped).toBe(false);
-      expect(result.total_tasks_scanned).toBe(4);
+      expect(result.total_tasks_scanned).toBe(5);
       expect(result.groups.length).toBeGreaterThanOrEqual(2);
+      expect(result.confidence).toBe("low"); // 5 筆 < 50
 
       // backend,success 分組應有 3 個樣本
       const backendGroup = result.groups.find(
@@ -129,11 +186,13 @@ describe("TokenCostAnalyzer", () => {
     });
 
     it("應識別超過 threshold_ratio 的異常值", async () => {
+      // 使用 5 筆以上確保超過 ABSOLUTE_MIN
       const index = makeIndex([
         { id: "T-001", tags: ["api"], status: "success" },
         { id: "T-002", tags: ["api"], status: "success" },
         { id: "T-003", tags: ["api"], status: "success" },
         { id: "T-004", tags: ["api"], status: "success" }, // outlier
+        { id: "T-005", tags: ["api"], status: "success" },
       ]);
 
       const manifests: Record<string, number> = {
@@ -141,6 +200,7 @@ describe("TokenCostAnalyzer", () => {
         "T-002": 1000,
         "T-003": 1000,
         "T-004": 5000, // 5x average → outlier
+        "T-005": 1000,
       };
 
       const backend = createMockBackend({
@@ -167,10 +227,13 @@ describe("TokenCostAnalyzer", () => {
     });
 
     it("無異常值時 outliers 應為空", async () => {
+      // 使用 5 筆以上確保超過 ABSOLUTE_MIN
       const index = makeIndex([
         { id: "T-001", tags: ["api"], status: "success" },
         { id: "T-002", tags: ["api"], status: "success" },
         { id: "T-003", tags: ["api"], status: "success" },
+        { id: "T-004", tags: ["api"], status: "success" },
+        { id: "T-005", tags: ["api"], status: "success" },
       ]);
 
       // 所有 token 差不多
@@ -178,6 +241,8 @@ describe("TokenCostAnalyzer", () => {
         "T-001": 1000,
         "T-002": 1050,
         "T-003": 1100,
+        "T-004": 980,
+        "T-005": 1020,
       };
 
       const backend = createMockBackend({
@@ -198,10 +263,13 @@ describe("TokenCostAnalyzer", () => {
     });
 
     it("manifest 不存在的 task 應被跳過", async () => {
+      // 使用 5 筆正常 + 1 筆 MISSING，確保 scanned >= 5
       const index = makeIndex([
         { id: "T-001", tags: ["api"], status: "success" },
         { id: "T-002", tags: ["api"], status: "success" },
         { id: "T-003", tags: ["api"], status: "success" },
+        { id: "T-004", tags: ["api"], status: "success" },
+        { id: "T-005", tags: ["api"], status: "success" },
         { id: "T-MISSING", tags: ["api"], status: "success" },
       ]);
 
@@ -211,6 +279,8 @@ describe("TokenCostAnalyzer", () => {
           if (path === "T-001/manifest.json") return JSON.stringify(makeManifest("T-001", 1000));
           if (path === "T-002/manifest.json") return JSON.stringify(makeManifest("T-002", 1000));
           if (path === "T-003/manifest.json") return JSON.stringify(makeManifest("T-003", 1000));
+          if (path === "T-004/manifest.json") return JSON.stringify(makeManifest("T-004", 1000));
+          if (path === "T-005/manifest.json") return JSON.stringify(makeManifest("T-005", 1000));
           return null; // T-MISSING returns null
         }),
       });
@@ -218,15 +288,17 @@ describe("TokenCostAnalyzer", () => {
       const analyzer = new TokenCostAnalyzer(backend, defaultConfig);
       const result = await analyzer.analyze();
 
-      expect(result.total_tasks_scanned).toBe(3);
+      expect(result.total_tasks_scanned).toBe(5);
     });
 
     it("不同 quality 應分為不同組", async () => {
+      // 使用 5 筆以上確保超過 ABSOLUTE_MIN
       const index = makeIndex([
         { id: "T-001", tags: ["api"], status: "success" },
         { id: "T-002", tags: ["api"], status: "success" },
         { id: "T-003", tags: ["api"], status: "success" },
         { id: "T-004", tags: ["api"], status: "failure" },
+        { id: "T-005", tags: ["api"], status: "success" },
       ]);
 
       const manifests: Record<string, number> = {
@@ -234,6 +306,7 @@ describe("TokenCostAnalyzer", () => {
         "T-002": 1000,
         "T-003": 1000,
         "T-004": 3000, // failure group 只有一個，不算 outlier
+        "T-005": 1000,
       };
 
       const backend = createMockBackend({
@@ -253,7 +326,7 @@ describe("TokenCostAnalyzer", () => {
       const failureGroup = result.groups.find((g) => g.group_key.quality === "failure");
 
       expect(successGroup).toBeDefined();
-      expect(successGroup!.sample_count).toBe(3);
+      expect(successGroup!.sample_count).toBe(4); // T-001, T-002, T-003, T-005
       expect(failureGroup).toBeDefined();
       expect(failureGroup!.sample_count).toBe(1);
     });
