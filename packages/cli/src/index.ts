@@ -13,7 +13,7 @@ import { registerInitCommand } from "./commands/init.js";
 import { registerSyncStandardsCommand } from "./commands/sync-standards.js";
 import { registerPackageCommand } from "./commands/package.js";
 import { registerReportCommand } from "./commands/report.js";
-import { registerEvolutionCommand } from "./commands/evolution.js";
+import { registerEvolutionCommand, loadEvolutionConfig, executeEvolutionAnalyze } from "./commands/evolution.js";
 import {
   orchestrate,
   validatePlan,
@@ -175,6 +175,20 @@ program
         await writeFile(lastReportPath, JSON.stringify(reportWithMeta, null, 2));
       } catch {
         // 靜默失敗，不影響主流程
+      }
+
+      // XSPEC-004: on-report 觸發 — 若 evolution config 設為 on-report，自動執行演進分析
+      if (!opts.dryRun) {
+        try {
+          const evoConfig = await loadEvolutionConfig(cwd);
+          if (evoConfig.enabled && evoConfig.trigger.mode === "on-report") {
+            console.log("\n─────────────────────────────────────────────");
+            console.log("🔄 [on-report] 自動觸發演進分析...");
+            await executeEvolutionAnalyze({ cwd, project: plan.project });
+          }
+        } catch {
+          // 靜默失敗，不影響主流程的 exit code
+        }
       }
 
       // 有失敗時回傳非零 exit code

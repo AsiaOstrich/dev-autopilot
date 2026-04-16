@@ -12,7 +12,7 @@ export { resolveQualityProfile, checkQualityWarnings } from "./quality-profile.j
 export { runFixLoop, buildStructuredFeedback, type ExecuteResult, type FixLoopCallbacks } from "./fix-loop.js";
 export { parseTelemetryJsonl } from "./telemetry-parser.js";
 export { TokenCostAnalyzer, ProposalGenerator, HookEfficiencyAnalyzer, HookEfficiencyProposalGenerator, QualityStrategyAnalyzer, QualityStrategyProposalGenerator, DriftDetector, ApprovalManager, serializeProposal, parseProposal } from "./evolution/index.js";
-export type { EvolutionConfig, AnalyzerConfig, QualityStrategyConfig, AnalysisResult, HookEfficiencyAnalysisResult, HookEfficiencyIssue, QualityStrategyAnalysisResult, QualityStrategyIssue, QualityStrategySignal, DriftAnalysisResult, DriftItem, DriftType, GroupKey, GroupStats, Outlier, Proposal, ProposalMeta, ProposalStatus, ProposalImpact, ProposalTarget, AnalysisLogEntry, ConfirmApplyFn, ApprovalResult } from "./evolution/index.js";
+export type { EvolutionConfig, AnalyzerConfig, QualityStrategyConfig, DriftDetectionConfig, AnalysisResult, HookEfficiencyAnalysisResult, HookEfficiencyIssue, QualityStrategyAnalysisResult, QualityStrategyIssue, QualityStrategySignal, DriftAnalysisResult, DriftItem, DriftType, GroupKey, GroupStats, Outlier, Proposal, ProposalMeta, ProposalStatus, ProposalImpact, ProposalTarget, AnalysisLogEntry, ConfirmApplyFn, ApprovalResult } from "./evolution/index.js";
 export { LocalStorageBackend } from "./execution-history/index.js";
 // SPEC-015: 打包框架
 export { loadRecipe, resolveConfig, executeTarget, interpolateCommand, orchestratePackaging } from "./packaging/index.js";

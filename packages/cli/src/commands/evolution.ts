@@ -24,7 +24,7 @@ import {
   QualityStrategyProposalGenerator,
   ApprovalManager,
 } from "@devap/core";
-import type { EvolutionConfig, AnalyzerConfig, QualityStrategyConfig, ProposalStatus } from "@devap/core";
+import type { EvolutionConfig, AnalyzerConfig, QualityStrategyConfig, DriftDetectionConfig, ProposalStatus } from "@devap/core";
 
 // ─── 預設配置 ───────────────────────────────────────────────
 
@@ -48,12 +48,17 @@ const DEFAULT_QUALITY_STRATEGY_CONFIG: QualityStrategyConfig = {
   token_overhead_ratio: 1.5,
 };
 
+const DEFAULT_DRIFT_DETECTION_CONFIG: DriftDetectionConfig = {
+  enabled: true,
+};
+
 const DEFAULT_EVOLUTION_CONFIG: EvolutionConfig = {
   enabled: true,
   analyzers: {
     "token-cost": DEFAULT_TOKEN_COST_CONFIG,
     "hook-efficiency": DEFAULT_HOOK_EFFICIENCY_CONFIG,
     "quality-strategy": DEFAULT_QUALITY_STRATEGY_CONFIG,
+    "drift-detection": DEFAULT_DRIFT_DETECTION_CONFIG,
   },
   trigger: { mode: "manual" },
   approval: { required: true },
@@ -61,7 +66,7 @@ const DEFAULT_EVOLUTION_CONFIG: EvolutionConfig = {
 
 // ─── Config 載入 ────────────────────────────────────────────
 
-async function loadEvolutionConfig(cwd: string): Promise<EvolutionConfig> {
+export async function loadEvolutionConfig(cwd: string): Promise<EvolutionConfig> {
   const configPath = join(cwd, ".evolution", "config.yaml");
   try {
     const raw = await readFile(configPath, "utf-8");
@@ -82,6 +87,14 @@ async function loadEvolutionConfig(cwd: string): Promise<EvolutionConfig> {
           ...DEFAULT_QUALITY_STRATEGY_CONFIG,
           ...parsed.analyzers?.["quality-strategy"],
         },
+        "drift-detection": {
+          ...DEFAULT_DRIFT_DETECTION_CONFIG,
+          ...parsed.analyzers?.["drift-detection"],
+        },
+      },
+      trigger: {
+        ...DEFAULT_EVOLUTION_CONFIG.trigger,
+        ...parsed.trigger,
       },
     };
   } catch {
@@ -132,7 +145,7 @@ export async function executeEvolutionAnalyze(opts: {
   // ── Token Cost Analysis ──────────────────────────────────
   const tokenConfig = config.analyzers["token-cost"];
   if (tokenConfig.enabled) {
-    console.log("📊 [1/3] Token 成本分析器...");
+    console.log("📊 [1/4] Token 成本分析器...");
     const tokenAnalyzer = new TokenCostAnalyzer(executionHistoryBackend, tokenConfig);
     const tokenResult = await tokenAnalyzer.analyze();
 
@@ -158,7 +171,7 @@ export async function executeEvolutionAnalyze(opts: {
   // ── Hook Efficiency Analysis ─────────────────────────────
   const hookConfig = config.analyzers["hook-efficiency"];
   if (hookConfig?.enabled) {
-    console.log("\n🪝 [2/3] Hook 效率分析器...");
+    console.log("\n🪝 [2/4] Hook 效率分析器...");
     const hookAnalyzer = new HookEfficiencyAnalyzer(cwd, hookConfig);
     const hookResult = await hookAnalyzer.analyze();
 
@@ -189,7 +202,7 @@ export async function executeEvolutionAnalyze(opts: {
   // ── Quality Strategy Analysis ────────────────────────────
   const qualityConfig = config.analyzers["quality-strategy"];
   if (qualityConfig?.enabled) {
-    console.log("\n🎯 [3/3] 品質策略分析器...");
+    console.log("\n🎯 [3/4] 品質策略分析器...");
     const qualityAnalyzer = new QualityStrategyAnalyzer(executionHistoryBackend, qualityConfig);
     const qualityResult = await qualityAnalyzer.analyze();
 
@@ -213,6 +226,33 @@ export async function executeEvolutionAnalyze(opts: {
         console.log(`  📝 產生 ${qualityProposals.length} 個提案`);
         for (const p of qualityProposals) {
           console.log(`     - ${p.meta.id}（impact: ${p.meta.impact}）→ ${p.meta.target.file ?? "unknown"}`);
+        }
+      }
+    }
+  }
+
+  // ── Drift Detection ──────────────────────────────────────
+  const driftConfig = config.analyzers["drift-detection"];
+  if (driftConfig?.enabled) {
+    console.log("\n🔍 [4/4] 文件飄移偵測...");
+    const driftDetector = new DriftDetector(cwd);
+    const driftResult = await driftDetector.analyze();
+
+    if (driftResult.skipped) {
+      console.log(`  ⏭  跳過：${driftResult.skip_reason}（找不到 .standards/ 目錄）`);
+    } else {
+      console.log(`  ✓  掃描 ${driftResult.files_scanned} 個檔案`);
+      console.log(`  📌 發現 ${driftResult.items.length} 個飄移引用`);
+
+      if (driftResult.items.length > 0) {
+        const broken = driftResult.items.filter((i) => i.drift_type === "broken_reference");
+        const stale = driftResult.items.filter((i) => i.drift_type === "stale_standard");
+        if (broken.length > 0) console.log(`     - 失效路徑引用：${broken.length} 個`);
+        if (stale.length > 0) console.log(`     - 失效標準引用：${stale.length} 個`);
+
+        const reportPath = await driftDetector.writeReport(driftResult, join(cwd, ".evolution"));
+        if (reportPath) {
+          console.log(`  📄 drift-report.md 已寫入 .evolution/proposals/`);
         }
       }
     }

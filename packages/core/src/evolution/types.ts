@@ -29,6 +29,11 @@ export interface QualityStrategyConfig extends AnalyzerConfig {
   token_overhead_ratio?: number;
 }
 
+/** 飄移偵測配置（比其他 analyzer 更輕量，不需 min_samples） */
+export interface DriftDetectionConfig {
+  enabled: boolean;
+}
+
 /** Evolution 模組配置（對應 .evolution/config.yaml） */
 export interface EvolutionConfig {
   enabled: boolean;
@@ -36,6 +41,7 @@ export interface EvolutionConfig {
     "token-cost": AnalyzerConfig;
     "hook-efficiency"?: AnalyzerConfig;
     "quality-strategy"?: QualityStrategyConfig;
+    "drift-detection"?: DriftDetectionConfig;
   };
   trigger: {
     mode: "manual" | "on-report" | "scheduled";
