@@ -18,6 +18,8 @@ import { LocalStorageBackend, FileServerStorageBackend } from "./execution-histo
 import { DiffCapture } from "./execution-history/diff-capture.js";
 import { LogCollector } from "./execution-history/log-collector.js";
 import { parseTelemetryJsonl } from "./telemetry-parser.js";
+import { checkBranchDrift } from "./branch-drift.js";
+import { RecoveryRegistry, DEFAULT_RECIPES } from "./recovery-registry.js";
 import type {
   ActivationPredicate,
   AgentAdapter,
@@ -565,6 +567,34 @@ async function executeOneTask(
     }
   }
 
+  // Branch Drift Check（XSPEC-047）：非首 task 執行前偵測分支漂移
+  if (completed.size > 0) {
+    const drift = await checkBranchDrift(
+      options.branchDriftBaseBranch ?? "main",
+      options.cwd ?? process.cwd(),
+      {
+        warningThreshold: options.branchDriftWarningThreshold ?? 5,
+        blockThreshold: options.branchDriftBlockThreshold ?? 6,
+      },
+    );
+    if (drift.status === "warning") {
+      options.onProgress?.(`[${task.id}] 分支漂移警告：落後 ${drift.behindCount} 個 commit（${drift.baseBranch}）`);
+    } else if (drift.status === "blocked") {
+      options.onProgress?.(`[${task.id}] 分支漂移阻擋：落後 ${drift.behindCount} 個 commit（${drift.baseBranch}），請先 rebase`);
+      return {
+        task_id: task.id,
+        status: "failed",
+        duration_ms: 0,
+        error: `分支漂移阻擋：工作分支落後 ${drift.baseBranch} ${drift.behindCount} 個 commit，請先執行 git rebase`,
+        failureSource: "branch_divergence",
+      };
+    }
+    // fetch_failed → 警告但繼續（graceful degradation）
+    if (drift.status === "fetch_failed") {
+      options.onProgress?.(`[${task.id}] 分支漂移偵測失敗（可能離線），繼續執行`);
+    }
+  }
+
   const taskStartTime = Date.now();
   const qc = options.qualityConfig;
 
@@ -682,6 +712,8 @@ async function executeTaskWithQuality(
     }
   }
 
+  let lastFailureSource: import("./types.js").FailureSource | undefined = undefined;
+
   const fixLoopResult = await runFixLoop(
     { max_retries: qc.max_retries, max_retry_budget_usd: qc.max_retry_budget_usd },
     {
@@ -743,6 +775,7 @@ async function executeTaskWithQuality(
 
         if (!gateResult.passed) {
           options.onProgress?.(`[${task.id}] Quality Gate 失敗（attempt ${attempt}）`);
+          lastFailureSource = gateResult.failureSource;
           return {
             success: false,
             cost_usd: taskResult.cost_usd ?? 0,
@@ -807,6 +840,16 @@ async function executeTaskWithQuality(
 
   const lastAttempt = fixLoopResult.attempts[fixLoopResult.attempts.length - 1];
   options.onProgress?.(`[${task.id}] 失敗：${fixLoopResult.stop_reason}（${retryCount} 次重試後）`);
+
+  // Recovery Recipe Registry 查詢（XSPEC-046）
+  if (lastFailureSource) {
+    const registry = new RecoveryRegistry(DEFAULT_RECIPES);
+    const recipe = registry.findRecipe({ failureSource: lastFailureSource });
+    if (recipe) {
+      options.onProgress?.(`[${task.id}] Recovery Recipe 建議：${recipe.strategy}（${recipe.id}）`);
+    }
+  }
+
   return {
     task_id: task.id,
     status: "failed",
@@ -815,6 +858,7 @@ async function executeTaskWithQuality(
     error: `${fixLoopResult.stop_reason}: ${lastAttempt?.feedback ?? "未知錯誤"}`,
     retry_count: retryCount,
     retry_cost_usd: fixLoopResult.total_retry_cost_usd,
+    failureSource: lastFailureSource,
   };
 }
 
