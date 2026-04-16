@@ -16,3 +16,7 @@ export type { EvolutionConfig, AnalyzerConfig, AnalysisResult, GroupKey, GroupSt
 // SPEC-015: 打包框架
 export { loadRecipe, resolveConfig, executeTarget, interpolateCommand, orchestratePackaging } from "./packaging/index.js";
 export type { PackagingTarget, PackagingConfig, Recipe, RecipeStep, PackagingResult, OrchestrateOptions } from "./packaging/index.js";
+// XSPEC-047: 分支漂移偵測
+export { checkBranchDrift, type BranchDriftResult, type BranchDriftStatus, type BranchDriftConfig } from "./branch-drift.js";
+// XSPEC-046: 恢復食譜註冊表
+export { RecoveryRegistry, DEFAULT_RECIPES } from "./recovery-registry.js";

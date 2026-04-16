@@ -18,6 +18,7 @@ import type {
   AgentAdapter,
   AgentType,
   ExecuteOptions,
+  FailureSource,
   Task,
   TaskResult,
   TaskStreamEvent,
@@ -339,9 +340,8 @@ export class ClaudeAdapter implements AgentAdapter {
     }
 
     // 錯誤情況
-    const status = result.subtype === "error_max_turns" || result.subtype === "error_max_budget_usd"
-      ? "timeout" as const
-      : "failed" as const;
+    const isResourceExhaustion = result.subtype === "error_max_turns" || result.subtype === "error_max_budget_usd";
+    const status = isResourceExhaustion ? "timeout" as const : "failed" as const;
 
     return {
       task_id: task.id,
@@ -350,6 +350,15 @@ export class ClaudeAdapter implements AgentAdapter {
       cost_usd: costUsd,
       duration_ms: durationMs,
       error: result.subtype,
+      ...(isResourceExhaustion && {
+        failureSource: "resource_exhaustion" as FailureSource,
+        failureDetail: {
+          source: "resource_exhaustion" as FailureSource,
+          raw_error: result.subtype,
+          detected_by: "claude-adapter",
+          timestamp: new Date().toISOString(),
+        },
+      }),
     };
   }
 }

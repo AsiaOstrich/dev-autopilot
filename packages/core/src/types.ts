@@ -91,6 +91,62 @@ export interface ActivationPredicate {
   description: string;
 }
 
+/**
+ * 失敗來源分類（XSPEC-045）
+ *
+ * 補充 TaskStatus（what happened）的「why it failed」維度。
+ * 每類對應不同的恢復策略，供 Recovery Recipe Registry（XSPEC-046）匹配。
+ */
+export type FailureSource =
+  | "prompt_delivery"     // API 4xx / 空回應 / 格式解析失敗
+  | "model_degradation"   // LLM 降智 / 重複輸出 / 品質驟降
+  | "branch_divergence"   // 工作分支落後基底分支（XSPEC-047）
+  | "compilation"         // tsc / build exit code != 0
+  | "test_failure"        // test 指令 exit code != 0
+  | "tool_failure"        // MCP / Plugin / CLI 工具失敗
+  | "policy_violation"    // Guardian / SafetyHook deny
+  | "resource_exhaustion" // token / budget / timeout 超限
+
+/**
+ * 結構化失敗細節（XSPEC-045）
+ */
+export interface FailureDetail {
+  readonly source: FailureSource;
+  readonly raw_error: string;
+  /** 偵測到失敗的元件名稱（quality-gate / claude-adapter / safety-hook / branch-drift） */
+  readonly detected_by: string;
+  readonly timestamp: string;
+}
+
+/**
+ * 恢復策略列舉（XSPEC-046）
+ */
+export type RecoveryStrategy =
+  | "fix_loop"
+  | "circuit_breaker"
+  | "rebase_and_retry"
+  | "model_switch"
+  | "degraded_mode"
+  | "human_checkpoint";
+
+/**
+ * 恢復食譜（XSPEC-046）
+ */
+export interface RecoveryRecipe {
+  readonly id: string;
+  readonly name: string;
+  readonly match: {
+    readonly failureSource: FailureSource;
+    readonly severity?: ReadonlyArray<"critical" | "high" | "medium" | "low">;
+  };
+  readonly strategy: RecoveryStrategy;
+  readonly config?: Readonly<Record<string, unknown>>;
+  readonly escalation: {
+    readonly onExhaust: RecoveryStrategy;
+    readonly message?: string;
+  };
+}
+
 /** Task 執行狀態 */
 export type TaskStatus =
   | "success"            // 正常完成
@@ -218,6 +274,10 @@ export interface TaskResult {
   readonly verification_passed?: boolean;
   /** 錯誤訊息（失敗時） */
   readonly error?: string;
+  /** 失敗來源分類（XSPEC-045，optional，不破壞現有程式碼） */
+  readonly failureSource?: FailureSource;
+  /** 結構化失敗細節（XSPEC-045，optional） */
+  readonly failureDetail?: FailureDetail;
   /** 重試次數（0 = 首次即成功） */
   readonly retry_count?: number;
   /** Judge 審查判決 */
@@ -794,6 +854,12 @@ export interface OrchestratorOptions {
    * 預設 false，不影響現有行為。
    */
   readonly streamOutput?: boolean;
+  /** 分支漂移警告閾值（XSPEC-047，預設 5） */
+  readonly branchDriftWarningThreshold?: number;
+  /** 分支漂移阻擋閾值（XSPEC-047，預設 6） */
+  readonly branchDriftBlockThreshold?: number;
+  /** 基底分支名稱（XSPEC-047，預設 "main"） */
+  readonly branchDriftBaseBranch?: string;
 }
 
 /**

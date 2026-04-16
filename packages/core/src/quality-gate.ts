@@ -12,7 +12,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import type { QualityConfig, Task, CompletionCheck, VerificationEvidence } from "./types.js";
+import type { QualityConfig, Task, CompletionCheck, VerificationEvidence, FailureSource } from "./types.js";
 
 /**
  * Quality Gate 檢查結果
@@ -30,6 +30,8 @@ export interface QualityGateResult {
   score?: number;
   /** 規格品質滿分（Standard mode = 10, Boost mode = 25） */
   max_score?: number;
+  /** 失敗來源分類（XSPEC-045，optional） */
+  failureSource?: FailureSource;
 }
 
 /**
@@ -545,6 +547,28 @@ export async function checkFrontendDesignCompliance(
   };
 }
 
+/**
+ * 根據失敗步驟名稱推斷失敗來源分類（XSPEC-045）
+ */
+function inferFailureSource(steps: QualityGateStep[]): FailureSource | undefined {
+  const failedStep = steps.find(s => !s.passed);
+  if (!failedStep) return undefined;
+
+  switch (failedStep.name) {
+    case "type_check":
+    case "static_analysis":
+      return "compilation";
+    case "verify":
+    case "unit":
+    case "integration":
+    case "system":
+    case "e2e":
+      return "test_failure";
+    default:
+      return undefined;
+  }
+}
+
 function buildFailResult(
   steps: QualityGateStep[],
   failedStep: QualityGateStep,
@@ -565,6 +589,7 @@ function buildFailResult(
     steps,
     feedback,
     evidence,
+    failureSource: inferFailureSource(steps),
     ...(task?.spec_score != null && {
       score: task.spec_score,
       max_score: task.spec_max_score ?? (task.spec_score <= 10 ? 10 : 25),
