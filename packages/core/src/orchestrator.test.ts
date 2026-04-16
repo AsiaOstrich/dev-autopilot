@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
+import { EventEmitter } from "node:events";
 import { orchestrate, topologicalSort, topologicalLayers } from "./orchestrator.js";
-import type { AgentAdapter, CheckpointSummary, QualityConfig, Task, TaskPlan, TaskResult, ExecuteOptions } from "./types.js";
+import type { AgentAdapter, CheckpointSummary, OrchestratorEvent, QualityConfig, Task, TaskPlan, TaskResult, ExecuteOptions } from "./types.js";
 
 /** 建立 mock adapter */
 function createMockAdapter(
@@ -1417,5 +1418,101 @@ describe("XSPEC-048: Orchestrator AbortSignal 取消機制", () => {
     expect(report.summary.succeeded).toBe(3);
     expect(report.summary.cancelled).toBe(0);
     expect(executeTaskMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("XSPEC-049: Orchestrator EventEmitter 結構化事件", () => {
+  const simplePlan3: TaskPlan = {
+    project: "test-emitter",
+    tasks: [
+      { id: "T-001", title: "Task A", spec: "spec" },
+      { id: "T-002", title: "Task B", spec: "spec", depends_on: ["T-001"] },
+    ],
+  };
+
+  it("AC-1/AC-8/AC-9: orchestrator:start 與 orchestrator:complete 各 emit 一次", async () => {
+    const emitter = new EventEmitter();
+    const events: OrchestratorEvent[] = [];
+    emitter.on("event", (e: OrchestratorEvent) => events.push(e));
+
+    const adapter = createMockAdapter();
+    await orchestrate(simplePlan3, adapter, { cwd: "/tmp/test", emitter });
+
+    const startEvents = events.filter(e => e.type === "orchestrator:start");
+    const completeEvents = events.filter(e => e.type === "orchestrator:complete");
+    expect(startEvents).toHaveLength(1);
+    expect(completeEvents).toHaveLength(1);
+    expect(startEvents[0].type === "orchestrator:start" && startEvents[0].task_count).toBe(2);
+    expect(completeEvents[0].type === "orchestrator:complete" && completeEvents[0].plan_id).toBe("test-emitter");
+  });
+
+  it("AC-3/AC-4: task:start 與 task:complete 各 Task emit 一次", async () => {
+    const emitter = new EventEmitter();
+    const events: OrchestratorEvent[] = [];
+    emitter.on("event", (e: OrchestratorEvent) => events.push(e));
+
+    const adapter = createMockAdapter();
+    await orchestrate(simplePlan3, adapter, { cwd: "/tmp/test", emitter });
+
+    const startEvents = events.filter(e => e.type === "task:start");
+    const completeEvents = events.filter(e => e.type === "task:complete");
+    expect(startEvents).toHaveLength(2);
+    expect(completeEvents).toHaveLength(2);
+    // task:start 在 task:complete 之前
+    const e001StartIdx = events.findIndex(e => e.type === "task:start" && e.task_id === "T-001");
+    const e001CompleteIdx = events.findIndex(e => e.type === "task:complete" && e.task_id === "T-001");
+    expect(e001StartIdx).toBeLessThan(e001CompleteIdx);
+  });
+
+  it("AC-7: task:skipped 在依賴失敗時 emit", async () => {
+    const emitter = new EventEmitter();
+    const events: OrchestratorEvent[] = [];
+    emitter.on("event", (e: OrchestratorEvent) => events.push(e));
+
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => ({
+        task_id: task.id,
+        status: task.id === "T-001" ? "failed" : "success",
+        duration_ms: 10,
+      })),
+    });
+    await orchestrate(simplePlan3, adapter, { cwd: "/tmp/test", emitter });
+
+    const skipped = events.filter(e => e.type === "task:skipped");
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0].type === "task:skipped" && skipped[0].task_id).toBe("T-002");
+  });
+
+  it("AC-6: signal:abort + task:cancelled emit（序列模式）", async () => {
+    const emitter = new EventEmitter();
+    const events: OrchestratorEvent[] = [];
+    emitter.on("event", (e: OrchestratorEvent) => events.push(e));
+
+    const controller = new AbortController();
+    const adapter = createMockAdapter({
+      executeTask: vi.fn(async (task: Task): Promise<TaskResult> => {
+        if (task.id === "T-001") controller.abort("test-cancel");
+        return { task_id: task.id, status: "success", duration_ms: 10 };
+      }),
+    });
+    await orchestrate(simplePlan3, adapter, { cwd: "/tmp/test", emitter, signal: controller.signal });
+
+    const abortEvents = events.filter(e => e.type === "signal:abort");
+    const cancelEvents = events.filter(e => e.type === "task:cancelled");
+    expect(abortEvents).toHaveLength(1);
+    expect(cancelEvents).toHaveLength(1);
+    expect(cancelEvents[0].type === "task:cancelled" && cancelEvents[0].reason).toBe("test-cancel");
+  });
+
+  it("AC-10: 不傳 emitter 時 onProgress 照常工作（向後相容）", async () => {
+    const messages: string[] = [];
+    const adapter = createMockAdapter();
+    await orchestrate(simplePlan3, adapter, {
+      cwd: "/tmp/test",
+      onProgress: (msg) => messages.push(msg),
+    });
+
+    expect(messages.some(m => m.includes("T-001"))).toBe(true);
+    expect(messages.some(m => m.includes("T-002"))).toBe(true);
   });
 });

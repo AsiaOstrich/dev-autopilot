@@ -826,6 +826,81 @@ export interface CheckpointSummary {
 export type CheckpointCallback = (summary: CheckpointSummary) => Promise<CheckpointAction>;
 
 /**
+ * Orchestrator 結構化事件（XSPEC-049）
+ *
+ * Discriminated union，透過 `type` 欄位區分事件類型。
+ * 透過 `OrchestratorOptions.emitter` 監聽，頻道名稱為 `"event"`。
+ */
+export type OrchestratorEvent =
+  | {
+      type: "orchestrator:start";
+      /** 計劃 ID（plan.id） */
+      plan_id: string;
+      /** 任務總數 */
+      task_count: number;
+      timestamp: string;
+    }
+  | {
+      type: "orchestrator:complete";
+      plan_id: string;
+      summary: ExecutionSummary;
+      /** 整體耗時（毫秒） */
+      duration_ms: number;
+      timestamp: string;
+    }
+  | {
+      type: "task:start";
+      task_id: string;
+      title: string;
+      timestamp: string;
+    }
+  | {
+      type: "task:complete";
+      task_id: string;
+      status: TaskStatus;
+      duration_ms: number;
+      timestamp: string;
+    }
+  | {
+      type: "task:failed";
+      task_id: string;
+      error: string;
+      failure_source?: FailureSource;
+      timestamp: string;
+    }
+  | {
+      type: "task:cancelled";
+      task_id: string;
+      reason: string;
+      timestamp: string;
+    }
+  | {
+      type: "task:skipped";
+      task_id: string;
+      reason: string;
+      timestamp: string;
+    }
+  | {
+      type: "layer:start";
+      /** 0-based 層索引 */
+      layer_index: number;
+      task_ids: string[];
+      timestamp: string;
+    }
+  | {
+      type: "layer:complete";
+      layer_index: number;
+      timestamp: string;
+    }
+  | {
+      type: "signal:abort";
+      reason: string;
+      /** 尚未執行的 Task 數量 */
+      remaining_tasks: number;
+      timestamp: string;
+    };
+
+/**
  * 編排器選項
  */
 export interface OrchestratorOptions {
@@ -887,6 +962,22 @@ export interface OrchestratorOptions {
    * 可用 AbortSignal.any([signal1, signal2]) 合併多個取消來源（用戶 + 逾時）。
    */
   readonly signal?: AbortSignal;
+  /**
+   * 結構化事件發射器（XSPEC-049）
+   *
+   * 監聽頻道 `"event"`，接收 `OrchestratorEvent` discriminated union。
+   * 與 `onProgress` 共存，不傳入時行為與舊版完全相同（向後相容）。
+   *
+   * @example
+   * ```typescript
+   * const emitter = new EventEmitter()
+   * emitter.on("event", (e: OrchestratorEvent) => {
+   *   if (e.type === "task:complete") console.log(e.task_id, e.duration_ms)
+   * })
+   * await orchestrate(plan, adapter, { emitter })
+   * ```
+   */
+  readonly emitter?: import("node:events").EventEmitter;
 }
 
 /**

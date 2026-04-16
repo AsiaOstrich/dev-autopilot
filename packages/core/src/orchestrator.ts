@@ -28,6 +28,8 @@ import type {
   ExecuteOptions,
   ExecutionReport,
   ExecutionSummary,
+  FailureSource,
+  OrchestratorEvent,
   OrchestratorOptions,
   QualityConfig,
   ResolvedTask,
@@ -40,6 +42,18 @@ import type {
   StandardEffectiveness,
   StandardsEffectivenessReport,
 } from "./types.js";
+
+/**
+ * XSPEC-049: 結構化事件發射輔助函式
+ *
+ * 避免在每個 emit 呼叫點重複 null 檢查。
+ */
+function emitEvent(
+  options: OrchestratorOptions,
+  event: OrchestratorEvent,
+): void {
+  options.emitter?.emit("event", event);
+}
 
 /**
  * 對 DAG 做拓撲排序
@@ -211,6 +225,14 @@ export async function orchestrate(
 
   const startTime = Date.now();
 
+  // XSPEC-049: orchestrator:start 事件
+  emitEvent(options, {
+    type: "orchestrator:start",
+    plan_id: plan.project,
+    task_count: plan.tasks.length,
+    timestamp: new Date().toISOString(),
+  });
+
   // 3. 初始化 StorageBackend + HistoryWriter（SPEC-008 / SPEC-012，opt-in）
   const historyEnabled = plan.execution_history?.enabled === true;
   const historyConfig = plan.execution_history;
@@ -267,6 +289,15 @@ export async function orchestrate(
 
     const report = buildReport(results, Date.now() - startTime, wrappedOptions.qualityConfig, wrappedOptions.cwd);
 
+    // XSPEC-049: orchestrator:complete 事件
+    emitEvent(wrappedOptions, {
+      type: "orchestrator:complete",
+      plan_id: plan.project,
+      summary: report.summary,
+      duration_ms: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+    });
+
     // SPEC-012: fire-and-forget L1 index snapshot 上傳（不阻塞主流程）
     if (fileServerBackend) {
       fileServerBackend.uploadIndexSnapshot().catch(() => {});
@@ -304,12 +335,27 @@ async function orchestrateSequential(
     if (options.signal?.aborted) {
       const cancelReason = String(options.signal.reason ?? "orchestrator-abort");
       options.onProgress?.(`⚠️ 已取消（${cancelReason}），停止後續 ${sortedTasks.length - i} 個 Task`);
+      // XSPEC-049: signal:abort 事件
+      emitEvent(options, {
+        type: "signal:abort",
+        reason: cancelReason,
+        remaining_tasks: sortedTasks.length - i,
+        timestamp: new Date().toISOString(),
+      });
       for (let j = i; j < sortedTasks.length; j++) {
-        results.push({
+        const cancelledResult: TaskResult = {
           task_id: sortedTasks[j].id,
           status: "cancelled",
           cancellation_reason: cancelReason,
           duration_ms: 0,
+        };
+        results.push(cancelledResult);
+        // XSPEC-049: task:cancelled 事件
+        emitEvent(options, {
+          type: "task:cancelled",
+          task_id: sortedTasks[j].id,
+          reason: cancelReason,
+          timestamp: new Date().toISOString(),
         });
       }
       break;
@@ -407,6 +453,14 @@ async function orchestrateParallel(
     if (options.signal?.aborted) {
       const cancelReason = String(options.signal.reason ?? "orchestrator-abort");
       options.onProgress?.(`⚠️ 已取消（${cancelReason}），停止後續 ${layers.length - layerIdx} 層`);
+      const remainingCount = layers.slice(layerIdx).reduce((acc, l) => acc + l.length, 0);
+      // XSPEC-049: signal:abort 事件
+      emitEvent(options, {
+        type: "signal:abort",
+        reason: cancelReason,
+        remaining_tasks: remainingCount,
+        timestamp: new Date().toISOString(),
+      });
       for (let j = layerIdx; j < layers.length; j++) {
         for (const t of layers[j]) {
           results.push({
@@ -414,6 +468,13 @@ async function orchestrateParallel(
             status: "cancelled",
             cancellation_reason: cancelReason,
             duration_ms: 0,
+          });
+          // XSPEC-049: task:cancelled 事件
+          emitEvent(options, {
+            type: "task:cancelled",
+            task_id: t.id,
+            reason: cancelReason,
+            timestamp: new Date().toISOString(),
           });
         }
       }
@@ -438,6 +499,13 @@ async function orchestrateParallel(
 
     const layer = layers[layerIdx];
     options.onProgress?.(`--- 第 ${layerIdx + 1}/${layers.length} 層：${layer.map(t => t.id).join(", ")} ---`);
+    // XSPEC-049: layer:start 事件
+    emitEvent(options, {
+      type: "layer:start",
+      layer_index: layerIdx,
+      task_ids: layer.map(t => t.id),
+      timestamp: new Date().toISOString(),
+    });
 
     // 優先使用 resolved task（含 generated_prompt），否則 fallback 到 mergeDefaults
     const mergedTasks = layer.map(t => resolvedTaskMap?.get(t.id) ?? mergeDefaults(t, plan));
@@ -482,6 +550,13 @@ async function orchestrateParallel(
         }
       }
     }
+
+    // XSPEC-049: layer:complete 事件
+    emitEvent(options, {
+      type: "layer:complete",
+      layer_index: layerIdx,
+      timestamp: new Date().toISOString(),
+    });
 
     // Fork Mode（XSPEC-038）：計算本層是否有且僅有 1 個成功 Task 且有 session_id
     if (options.parallelForkMode) {
@@ -559,6 +634,13 @@ async function executeOneTask(
 
   if (depsFailed) {
     options.onProgress?.(`[${task.id}] 跳過：依賴任務失敗`);
+    // XSPEC-049: task:skipped 事件
+    emitEvent(options, {
+      type: "task:skipped",
+      task_id: task.id,
+      reason: "依賴任務失敗",
+      timestamp: new Date().toISOString(),
+    });
     return {
       task_id: task.id,
       status: "skipped",
@@ -577,6 +659,13 @@ async function executeOneTask(
     if (!satisfied) {
       const desc = task.activationPredicate.description;
       options.onProgress?.(`[${task.id}] 跳過：activation predicate not met: ${desc}`);
+      // XSPEC-049: task:skipped 事件
+      emitEvent(options, {
+        type: "task:skipped",
+        task_id: task.id,
+        reason: `activation predicate not met: ${desc}`,
+        timestamp: new Date().toISOString(),
+      });
       return {
         task_id: task.id,
         status: "skipped",
@@ -652,6 +741,13 @@ async function executeTaskSimple(
   forkSession?: boolean,
 ): Promise<TaskResult> {
   options.onProgress?.(`[${task.id}] 開始執行：${task.title}`);
+  // XSPEC-049: task:start 事件
+  emitEvent(options, {
+    type: "task:start",
+    task_id: task.id,
+    title: task.title,
+    timestamp: new Date().toISOString(),
+  });
 
   // Worktree 隔離：為 task 建立獨立 worktree
   let taskCwd = options.cwd;
@@ -708,6 +804,14 @@ async function executeTaskSimple(
     }
 
     options.onProgress?.(`[${task.id}] 完成：${result.status}`);
+    // XSPEC-049: task:complete 事件
+    emitEvent(options, {
+      type: "task:complete",
+      task_id: task.id,
+      status: result.status,
+      duration_ms: result.duration_ms ?? Date.now() - taskStartTime,
+      timestamp: new Date().toISOString(),
+    });
     return result;
   } catch (error) {
     const failed: TaskResult = {
@@ -717,6 +821,13 @@ async function executeTaskSimple(
       error: error instanceof Error ? error.message : String(error),
     };
     options.onProgress?.(`[${task.id}] 執行失敗：${failed.error}`);
+    // XSPEC-049: task:failed 事件
+    emitEvent(options, {
+      type: "task:failed",
+      task_id: task.id,
+      error: failed.error ?? "unknown error",
+      timestamp: new Date().toISOString(),
+    });
     return failed;
   }
 }
@@ -734,6 +845,13 @@ async function executeTaskWithQuality(
   forkSession?: boolean,
 ): Promise<TaskResult> {
   options.onProgress?.(`[${task.id}] 開始執行（品質模式）：${task.title}`);
+  // XSPEC-049: task:start 事件（品質模式）
+  emitEvent(options, {
+    type: "task:start",
+    task_id: task.id,
+    title: task.title,
+    timestamp: new Date().toISOString(),
+  });
 
   // Worktree 隔離
   let taskCwd = options.cwd;
@@ -859,7 +977,15 @@ async function executeTaskWithQuality(
     // XSPEC-048: cancelled 例外直接回傳 cancelled TaskResult（不觸發重試）
     const e = err as { message?: string; taskResult?: TaskResult };
     if (e.message === "task-cancelled" && e.taskResult) {
-      return e.taskResult as TaskResult;
+      const cancelledResult = e.taskResult as TaskResult;
+      // XSPEC-049: task:cancelled 事件
+      emitEvent(options, {
+        type: "task:cancelled",
+        task_id: cancelledResult.task_id,
+        reason: cancelledResult.cancellation_reason ?? "abort",
+        timestamp: new Date().toISOString(),
+      });
+      return cancelledResult;
     }
     throw err;
   }
@@ -879,6 +1005,14 @@ async function executeTaskWithQuality(
     }
 
     options.onProgress?.(`[${task.id}] 完成：success${retryCount > 0 ? `（重試 ${retryCount} 次）` : ""}`);
+    // XSPEC-049: task:complete 事件（品質模式）
+    emitEvent(options, {
+      type: "task:complete",
+      task_id: task.id,
+      status: "success",
+      duration_ms: duration,
+      timestamp: new Date().toISOString(),
+    });
     return {
       task_id: task.id,
       status: "success",
@@ -902,6 +1036,14 @@ async function executeTaskWithQuality(
     }
   }
 
+  // XSPEC-049: task:failed 事件（品質模式）
+  emitEvent(options, {
+    type: "task:failed",
+    task_id: task.id,
+    error: `${fixLoopResult.stop_reason}: ${lastAttempt?.feedback ?? "未知錯誤"}`,
+    failure_source: lastFailureSource as FailureSource | undefined,
+    timestamp: new Date().toISOString(),
+  });
   return {
     task_id: task.id,
     status: "failed",
