@@ -45,6 +45,9 @@
     "commander": "^13.0.0",
     "js-yaml": "^4.1.1"
   },
+  "optionalDependencies": {
+    "@asiaostrich/telemetry-client": "file:../../../asiaostrich-telemetry-client"
+  },
   "devDependencies": {
     "@devap/adapter-claude": "workspace:*",
     "@devap/adapter-cli": "workspace:*",

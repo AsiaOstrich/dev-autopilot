@@ -93,6 +93,13 @@ importers:
       commander:
         specifier: ^13.0.0
         version: 13.1.0
+      js-yaml:
+        specifier: ^4.1.1
+        version: 4.1.1
+    optionalDependencies:
+      '@asiaostrich/telemetry-client':
+        specifier: file:../../../asiaostrich-telemetry-client
+        version: file:../asiaostrich-telemetry-client
     devDependencies:
       '@devap/adapter-claude':
         specifier: workspace:*
@@ -106,6 +113,9 @@ importers:
       '@devap/core':
         specifier: workspace:*
         version: link:../core
+      '@types/js-yaml':
+        specifier: ^4.0.9
+        version: 4.0.9
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(postcss@8.5.8)(tsx@4.21.0)(typescript@5.9.3)
@@ -118,6 +128,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@asiaostrich/telemetry-client':
+        specifier: file:../../../asiaostrich-telemetry-client
+        version: file:../asiaostrich-telemetry-client
       ajv:
         specifier: ^8.18.0
         version: 8.18.0
@@ -145,6 +158,10 @@ packages:
     engines: {node: '>=18.0.0'}
     peerDependencies:
       zod: ^4.0.0
+
+  '@asiaostrich/telemetry-client@file:../asiaostrich-telemetry-client':
+    resolution: {directory: ../asiaostrich-telemetry-client, type: directory}
+    engines: {node: '>=18.0.0'}
 
   '@esbuild/aix-ppc64@0.21.5':
     resolution: {integrity: sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==}
@@ -1432,6 +1449,8 @@ snapshots:
       '@img/sharp-linuxmusl-x64': 0.34.5
       '@img/sharp-win32-arm64': 0.34.5
       '@img/sharp-win32-x64': 0.34.5
+
+  '@asiaostrich/telemetry-client@file:../asiaostrich-telemetry-client': {}
 
   '@esbuild/aix-ppc64@0.21.5':
     optional: true
