@@ -6,6 +6,7 @@
     "build": "pnpm -r build",
     "lint": "eslint packages/*/src/**/*.ts",
     "test": "pnpm -r test",
+    "typecheck": "pnpm -r --no-bail exec tsc --noEmit",
     "clean": "pnpm -r clean",
     "prepare": "husky"
   },
