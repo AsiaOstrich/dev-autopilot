@@ -194,8 +194,8 @@ describe("runFixLoop", () => {
 // ─────────────────────────────────────────────────────────────────
 
 describe("computeErrorFingerprint()（XSPEC-061 AC-2）", () => {
-  it("Judge verdict=PASS 時回傳 null", () => {
-    const judgeResult: JudgeResult = { verdict: "PASS", reasoning: "all good" };
+  it("Judge verdict=APPROVE 時回傳 null", () => {
+    const judgeResult: JudgeResult = { verdict: "APPROVE", reasoning: "all good" };
     expect(computeErrorFingerprint(judgeResult)).toBeNull();
   });
 
@@ -480,11 +480,11 @@ describe("FixLoopAttempt.error_fingerprint 記錄（XSPEC-061 AC-4）", () => {
           judge_result: { verdict: "REJECT", reasoning: "type error", attack_vectors: ["A"] },
         };
       }
-      // 成功時也提供 judge_result（PASS verdict）
+      // 成功時也提供 judge_result（APPROVE verdict）
       return {
         success: true,
         cost_usd: 0.1,
-        judge_result: { verdict: "PASS", reasoning: "all good" },
+        judge_result: { verdict: "APPROVE", reasoning: "all good" },
       };
     });
 
@@ -496,7 +496,7 @@ describe("FixLoopAttempt.error_fingerprint 記錄（XSPEC-061 AC-4）", () => {
     // 第 1 次嘗試失敗，judge_result REJECT → error_fingerprint 為 hash string
     expect(result.attempts[0].error_fingerprint).not.toBeUndefined();
     expect(typeof result.attempts[0].error_fingerprint).toBe("string");
-    // 第 2 次嘗試成功，judge_result PASS → error_fingerprint 為 null
+    // 第 2 次嘗試成功，judge_result APPROVE → error_fingerprint 為 null
     expect(result.attempts[1].error_fingerprint).toBeNull();
   });
 
@@ -513,6 +513,82 @@ describe("FixLoopAttempt.error_fingerprint 記錄（XSPEC-061 AC-4）", () => {
 
     // 無 judge_result → error_fingerprint 為 undefined
     expect(result.attempts[0].error_fingerprint).toBeUndefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// BUG-A12 (XSPEC-073): JudgeVerdict 型別與 "PASS" 比較永不成立
+// 回歸測試：確保 fix-loop 在 Judge APPROVE 時可正確終止收斂
+// ─────────────────────────────────────────────────────────────────
+
+describe("BUG-A12 regression: Judge APPROVE 時 fix-loop 正確終止（DEC-040 收斂機制）", () => {
+  it("computeErrorFingerprint(APPROVE) 必須回傳 null（非 hash 字串）", () => {
+    // 修復前：fix-loop.ts:224 比對 verdict === "PASS"（永不成立），
+    // 導致 APPROVE 也會被當成 REJECT 計算 hash → fingerprintHistory 累積 →
+    // isStuck 可能誤判 stuck，破壞 DEC-040 收斂語義。
+    const approve: JudgeResult = { verdict: "APPROVE", reasoning: "ok" };
+    expect(computeErrorFingerprint(approve)).toBeNull();
+  });
+
+  it("Judge APPROVE 時 runFixLoop 立即終止為 success（不進入 stuck 路徑）", async () => {
+    // 模擬 1 次嘗試就 APPROVE 通過。若 BUG-A12 未修，APPROVE 會被計算為非 null
+    // fingerprint，使 fingerprintHistory 累積，但因 success=true 會先 return passed，
+    // 真正的破壞發生在「失敗→失敗→APPROVE」這種混合序列：APPROVE 不應 push 進 history。
+    const execute = vi.fn(async (): Promise<ExecuteResult> => ({
+      success: true,
+      cost_usd: 0.05,
+      judge_result: { verdict: "APPROVE", reasoning: "all good" },
+    }));
+
+    const result = await runFixLoop(
+      { max_retries: 3, max_retry_budget_usd: 10.0 },
+      { execute },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.stop_reason).toBe("passed");
+    expect(result.attempts).toHaveLength(1);
+    expect(result.attempts[0].error_fingerprint).toBeNull();
+  });
+
+  it("REJECT → APPROVE 序列：APPROVE 終止收斂為 passed（非 stuck）", async () => {
+    // 修復前因 verdict === "PASS" 永不成立，APPROVE 也會被計算為非 null fingerprint，
+    // 導致 fingerprintHistory 累積；但因 result.success=true 仍會 return passed，
+    // 所以 BUG-A12 在「成功路徑」最直接的觀察點是 attempt 的 error_fingerprint 應為 null。
+    let callCount = 0;
+    const execute = vi.fn(async (): Promise<ExecuteResult> => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          success: false,
+          cost_usd: 0.1,
+          feedback: "fail",
+          judge_result: {
+            verdict: "REJECT",
+            reasoning: "type error",
+            attack_vectors: ["A"],
+          },
+        };
+      }
+      return {
+        success: true,
+        cost_usd: 0.1,
+        judge_result: { verdict: "APPROVE", reasoning: "fixed" },
+      };
+    });
+
+    const result = await runFixLoop(
+      { max_retries: 5, max_retry_budget_usd: 10.0, stop_on_fingerprint_repeat: 3 },
+      { execute },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.stop_reason).toBe("passed");
+    expect(result.attempts).toHaveLength(2);
+    // 第一次 REJECT → hash string
+    expect(typeof result.attempts[0].error_fingerprint).toBe("string");
+    // 第二次 APPROVE → null（修復前會是 hash string）
+    expect(result.attempts[1].error_fingerprint).toBeNull();
   });
 });
 

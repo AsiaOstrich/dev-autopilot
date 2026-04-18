@@ -130,7 +130,7 @@ export async function runFixLoop(
     const result = await callbacks.execute(lastFeedback, i);
 
     // XSPEC-061 AC-4：計算指紋
-    // - judge_result 有提供 → computeErrorFingerprint（PASS 時回傳 null，REJECT 回傳 hash）
+    // - judge_result 有提供 → computeErrorFingerprint（APPROVE 時回傳 null，REJECT 回傳 hash）
     // - judge_result 未提供 → undefined（向後相容，不填入）
     const fingerprint: string | null | undefined = result.judge_result
       ? computeErrorFingerprint(result.judge_result)
@@ -218,10 +218,10 @@ export async function runFixLoop(
  * 公式：sha256(sorted(attack_vectors).join('|') + '::' + failureCategory) 取前 16 字元
  *
  * @param judgeResult - Judge 審查結果（需含 attack_vectors 和 reasoning）
- * @returns 16 字元 hex 指紋，Judge PASS 時回傳 null
+ * @returns 16 字元 hex 指紋，Judge APPROVE 時回傳 null
  */
 export function computeErrorFingerprint(judgeResult: JudgeResult): string | null {
-  if (judgeResult.verdict === "PASS") return null;
+  if (judgeResult.verdict === "APPROVE") return null;
 
   const attackVectors = (judgeResult.attack_vectors ?? []).sort().join("|");
   const failureCategory = categorizeFailureReason(judgeResult.reasoning);
@@ -249,7 +249,7 @@ function categorizeFailureReason(reason: string): string {
  * 檢查最近 threshold 次迭代（history 最後 threshold-1 筆 + current）是否全部相同。
  *
  * @param history - 過去所有迭代的指紋記錄（不含本次）
- * @param current - 本次迭代的指紋（null 表示 Judge PASS，永不卡死）
+ * @param current - 本次迭代的指紋（null 表示 Judge APPROVE，永不卡死）
  * @param threshold - 連續相同次數觸發停止的閾值（預設 2）
  * @returns true = 卡死，應停止重試
  */
