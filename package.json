@@ -1,5 +1,6 @@
 {
   "name": "devap",
+  "version": "0.2.0",
   "private": true,
   "description": "Agent-agnostic unattended development orchestrator",
   "scripts": {
