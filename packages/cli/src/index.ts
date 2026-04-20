@@ -10,6 +10,7 @@
 import { access, writeFile, mkdir } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
+import { createRequire } from "node:module";
 import { Command } from "commander";
 import { registerInitCommand } from "./commands/init.js";
 import { registerSyncStandardsCommand } from "./commands/sync-standards.js";
@@ -31,12 +32,15 @@ import { checkTermsAccepted, warnIfNoApiKey } from "./compliance.js";
 import { createOrchestrationTelemetry } from "./telemetry.js";
 import { createProgressEmitter } from "./progress.js";
 
+const _require = createRequire(import.meta.url);
+const _pkg = _require("../package.json") as { version: string };
+
 const program = new Command();
 
 program
   .name("devap")
   .description("Agent-agnostic 無人值守開發編排器")
-  .version("0.1.3");
+  .version(_pkg.version);
 
 program
   .command("run")
