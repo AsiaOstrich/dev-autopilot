@@ -46,7 +46,7 @@
     "js-yaml": "^4.1.1"
   },
   "optionalDependencies": {
-    "@asiaostrich/telemetry-client": "file:../../../asiaostrich-telemetry-client"
+    "@asiaostrich/telemetry-client": "github:AsiaOstrich/asiaostrich-telemetry-client#main"
   },
   "devDependencies": {
     "@devap/adapter-claude": "workspace:*",

@@ -98,8 +98,8 @@ importers:
         version: 4.1.1
     optionalDependencies:
       '@asiaostrich/telemetry-client':
-        specifier: file:../../../asiaostrich-telemetry-client
-        version: file:../asiaostrich-telemetry-client
+        specifier: github:AsiaOstrich/asiaostrich-telemetry-client#main
+        version: git+https://github.com/AsiaOstrich/asiaostrich-telemetry-client.git#147e6b5b3533d529f79a2a98a47a87ae7563582a
     devDependencies:
       '@devap/adapter-claude':
         specifier: workspace:*
@@ -129,8 +129,8 @@ importers:
   packages/core:
     dependencies:
       '@asiaostrich/telemetry-client':
-        specifier: file:../../../asiaostrich-telemetry-client
-        version: file:../asiaostrich-telemetry-client
+        specifier: github:AsiaOstrich/asiaostrich-telemetry-client#main
+        version: git+https://github.com/AsiaOstrich/asiaostrich-telemetry-client.git#147e6b5b3533d529f79a2a98a47a87ae7563582a
       ajv:
         specifier: ^8.18.0
         version: 8.18.0
@@ -159,8 +159,9 @@ packages:
     peerDependencies:
       zod: ^4.0.0
 
-  '@asiaostrich/telemetry-client@file:../asiaostrich-telemetry-client':
-    resolution: {directory: ../asiaostrich-telemetry-client, type: directory}
+  '@asiaostrich/telemetry-client@git+https://github.com/AsiaOstrich/asiaostrich-telemetry-client.git#147e6b5b3533d529f79a2a98a47a87ae7563582a':
+    resolution: {commit: 147e6b5b3533d529f79a2a98a47a87ae7563582a, repo: https://github.com/AsiaOstrich/asiaostrich-telemetry-client.git, type: git}
+    version: 0.1.0
     engines: {node: '>=18.0.0'}
 
   '@esbuild/aix-ppc64@0.21.5':
@@ -1450,7 +1451,7 @@ snapshots:
       '@img/sharp-win32-arm64': 0.34.5
       '@img/sharp-win32-x64': 0.34.5
 
-  '@asiaostrich/telemetry-client@file:../asiaostrich-telemetry-client': {}
+  '@asiaostrich/telemetry-client@git+https://github.com/AsiaOstrich/asiaostrich-telemetry-client.git#147e6b5b3533d529f79a2a98a47a87ae7563582a': {}
 
   '@esbuild/aix-ppc64@0.21.5':
     optional: true
