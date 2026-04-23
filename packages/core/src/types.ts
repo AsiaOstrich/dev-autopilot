@@ -479,6 +479,26 @@ export interface StandardsEffectivenessReport {
   harness_hook_data?: HarnessHookData;
 }
 
+/**
+ * Push receipt — git push 完成後的結構化稽核紀錄（XSPEC-081）
+ */
+export interface PushReceipt {
+  /** 推送目標分支名稱 */
+  branch: string;
+  /** HEAD commit SHA（短版本） */
+  commit_sha: string;
+  /** 已通過的 gate 清單 */
+  gates_passed: string[];
+  /** 是否跳過 gates */
+  gates_skipped: boolean;
+  /** 是否為 force push */
+  force_push: boolean;
+  /** 推送完成時間（ISO 8601） */
+  timestamp: string;
+  /** push 目標的 remote 名稱，通常為 "origin" */
+  target_remote: string;
+}
+
 export interface ExecutionReport {
   /** 摘要統計 */
   summary: ExecutionSummary;
@@ -512,6 +532,11 @@ export interface ExecutionReport {
    * 多計劃格式（MultiPlanFile）時填入選用的 plan 名稱；單計劃格式為 undefined。
    */
   plan_name?: string;
+  /**
+   * Push receipt（XSPEC-081）
+   * 當 devap push 成功完成時填入此欄位。
+   */
+  push_receipt?: PushReceipt;
 }
 
 /**
@@ -822,6 +847,22 @@ export interface QualityConfig {
   completion_criteria?: CompletionCheck[];
   /** 是否啟用 Red Team 第三審查階段（預設 false，XSPEC-043） */
   red_team?: boolean;
+  /**
+   * Push gate 設定（XSPEC-081）
+   * 若設定此欄位，devap push 命令會在 git push 前執行對應的品質檢查。
+   */
+  push_gate?: {
+    /** 要執行的 gate 清單，預設 ["lint", "test"] */
+    gates?: Array<"lint" | "test" | "ac-coverage" | "type-check" | "security-scan">;
+    /** push 目標的 protected branch pattern 清單，預設 ["main", "master", "release/*", "hotfix/*"] */
+    protected_branches?: string[];
+    /** push 成功後是否提示建立 PR，預設 true（team 模式） */
+    auto_pr?: boolean;
+    /** repo 模式，single-owner 略過 PR 提示，預設 "team" */
+    repo_mode?: "team" | "single-owner";
+    /** push receipt 輸出模式，預設 "console" */
+    receipt_output?: "console" | "file" | "both";
+  };
 }
 
 /**
