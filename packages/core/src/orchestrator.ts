@@ -85,6 +85,47 @@ function emitEvent(
 }
 
 /**
+ * XSPEC-082: Agent 行為紀律閘門
+ *
+ * 在任務執行前發出「問/減/準/測」紀律提示，
+ * 並根據 ask_threshold 檢查 acceptance_criteria 覆蓋率。
+ */
+function checkDisciplineGate(
+  plan: TaskPlan,
+  options: OrchestratorOptions,
+): void {
+  const cfg = options.discipline!;
+  const askThreshold = cfg.ask_threshold ?? 0.6;
+
+  const tasksWithoutAC = plan.tasks.filter(t => !t.acceptance_criteria?.length).length;
+  const acMissingRatio = plan.tasks.length > 0 ? tasksWithoutAC / plan.tasks.length : 0;
+
+  const header = [
+    "[Discipline] Agent Behavior Discipline — XSPEC-082",
+    "  問：先揭露假設再執行，不確定時回問",
+    "  減：最小充分原則，不預測性擴張",
+    "  準：只修改必要範圍，發現無關問題先口頭提及",
+    "  測：先定義可量化成功標準，循環直到通過驗證",
+  ].join("\n");
+  options.onProgress?.(header);
+
+  emitEvent(options, {
+    type: "discipline:start",
+    ask_threshold: askThreshold,
+    ac_missing_ratio: acMissingRatio,
+    tasks_without_ac: tasksWithoutAC,
+    timestamp: new Date().toISOString(),
+  });
+
+  if (acMissingRatio > askThreshold) {
+    options.onProgress?.(
+      `[Discipline] ⚠ Ask 原則：${tasksWithoutAC}/${plan.tasks.length} 個 Task 缺少 acceptance_criteria。` +
+      `建議補充可量化驗收標準後再執行。`,
+    );
+  }
+}
+
+/**
  * 對 DAG 做拓撲排序
  *
  * 使用 Kahn's algorithm，回傳依賴順序排列的 task 列表。
@@ -310,6 +351,11 @@ export async function orchestrate(
   // XSPEC-053: 驗證 taskFilter 中不存在的 task_id
   if (wrappedOptions.taskFilter) {
     warnUnknownTaskIds(plan, wrappedOptions.taskFilter, wrappedOptions.onProgress);
+  }
+
+  // XSPEC-082: Agent 行為紀律閘門（opt-in，需設定 discipline 選項）
+  if (wrappedOptions.discipline) {
+    checkDisciplineGate(plan, wrappedOptions);
   }
 
   // 6. 選擇執行模式

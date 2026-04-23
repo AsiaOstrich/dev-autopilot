@@ -901,6 +901,35 @@ export interface FixLoopConfig {
 }
 
 /**
+ * Agent 行為紀律設定（XSPEC-082 / DEC-048）
+ *
+ * 啟用後，orchestrate() 在執行前發出「問/減/準/測」紀律提示，
+ * 並檢查任務的 acceptance_criteria 覆蓋率（Test 原則）。
+ */
+export interface DisciplineConfig {
+  /**
+   * 觸發 Ask-First 假設揭露警告的缺少 AC 比例閾值（0~1，預設 0.6）
+   *
+   * 計畫中缺少 acceptance_criteria 的 task 比例超過此閾值時，
+   * orchestrate() 發出 ask 原則警告。
+   */
+  readonly ask_threshold?: number;
+  /**
+   * 自我驗證循環最大重試次數（預設 5）
+   *
+   * 同時設定了 QualityConfig.max_retries 時，以較小值為準。
+   */
+  readonly max_loop_retries?: number;
+  /**
+   * 精準修改模式（預設 "strict"）
+   *
+   * strict: 在 generated_prompt 頭部注入 Scope 宣告提醒
+   * relaxed: 僅記錄，不注入
+   */
+  readonly precision_scope?: "strict" | "relaxed";
+}
+
+/**
  * Fix Loop 單次嘗試結果
  */
 export interface FixLoopAttempt {
@@ -1056,6 +1085,17 @@ export type OrchestratorEvent =
       /** 尚未執行的 Task 數量 */
       remaining_tasks: number;
       timestamp: string;
+    }
+  | {
+      /** Agent 行為紀律閘門觸發（XSPEC-082） */
+      type: "discipline:start";
+      /** Ask 閾值（0~1） */
+      ask_threshold: number;
+      /** 缺少 acceptance_criteria 的 task 比例 */
+      ac_missing_ratio: number;
+      /** 缺少 acceptance_criteria 的 task 數量 */
+      tasks_without_ac: number;
+      timestamp: string;
     };
 
 /**
@@ -1196,6 +1236,14 @@ export interface OrchestratorOptions {
    * 被過濾掉的 Task 狀態設為 "skipped"，reason="task-filter"。
    */
   readonly taskFilter?: TaskFilter;
+  /**
+   * Agent 行為紀律設定（XSPEC-082 / DEC-048）
+   *
+   * 啟用時，orchestrate() 在任務執行前發出「問/減/準/測」紀律提示，
+   * 並檢查 acceptance_criteria 覆蓋率（Test 原則）。
+   * ask_threshold 超過時發出 Ask 原則警告。
+   */
+  readonly discipline?: DisciplineConfig;
 }
 
 /**
