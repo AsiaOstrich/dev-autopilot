@@ -59,7 +59,7 @@ This standard defines language usage guidelines for projects with Traditional Ch
 
 When using AI assistants with Traditional Chinese documentation, use these Chinese equivalents of the certainty tags defined in `core/anti-hallucination.md`:
 
-與 AI 助手協作時，使用以下中文確定性標籤（對應 `core/anti-hallucination.md` 定義���：
+與 AI 助手協作時，使用以下中文確定性標籤（對應 `core/anti-hallucination.md` 定義）：
 
 ### Tag Mapping | 標籤對照
 
@@ -95,7 +95,7 @@ When using AI assistants with Traditional Chinese documentation, use these Chine
 **理由**：
 - `[已確認]` 團隊已有 PostgreSQL 維運經驗 (使用者確認)
 - `[已確認]` 現有授權可用 (使用者確認)
-- `[推論]` JSON 欄位支���有助於彈性資料儲存
+- `[推論]` JSON 欄位支援有助於彈性資料儲存
 ```
 
 **In Code Review | 程式碼審查中**:
