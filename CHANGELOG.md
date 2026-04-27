@@ -7,7 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-27
+
+> **Minor Release**: XSPEC-086 Phase 0/1/2/6/7 — 統一流程模型、commit 閘門、release 命令、8 個 UDS 流程標準遷移至 DevAP、全專案安裝（dev-platform/VibeOps/UDS dogfooding）。
+
 ### Added
+
+#### Standards Repository（XSPEC-086 Phase 2）
+- `standards/flow/` — 4 個純流程標準，從 UDS 遷移至 DevAP 成為 canonical 位置
+  - `workflow-enforcement.ai.yaml` — SDD/TDD/BDD/commit 各階段可執行閘門定義（canonical）
+  - `workflow-state-protocol.ai.yaml` — `.workflow-state/` 狀態機協定、event log 格式、轉換規則
+  - `change-batching-standards.ai.yaml` — PENDING→READY→MERGED 狀態機、threshold 策略（count/score/time）、atomicity 規則
+  - `pipeline-integration-standards.ai.yaml` — 6-stage pipeline 模型（PLAN/SPEC/DERIVE/BUILD/REVIEW/CHECKIN）、toggle 設定合約
+- `standards/orchestration/` — 3 個編排標準，從 UDS 遷移至 DevAP 成為 canonical 位置
+  - `agent-dispatch.ai.yaml` — sub-agent 派遣、並行協調、DONE/BLOCKED/NEEDS_CONTEXT 狀態協定
+  - `agent-communication-protocol.ai.yaml` — 8-code 統一狀態協定、Envelope 必填欄位、hook exit code 規範
+  - `execution-history.ai.yaml` — L1/L2/L3 分層存取、`.execution-history/` 目錄結構、保留策略、敏感資料 redaction
+- `standards/flow/branch-completion.ai.yaml` — 4 選項完成流程（merge/pr/keep/discard）、前置條件檢查、BC-001~BC-004 規則
+- `standards/README.md` — standards/ 目錄說明（flow/ + orchestration/ 區分原則）
+- `.devap/release-config.json` — 定義版本同步檔案列表 + CHANGELOG 路徑（devap release 依賴）
+
+#### Unified Flow Model（XSPEC-087 / XSPEC-086 Phase 0）
+- `FlowParser`：解析 flow YAML 為 FlowDefinition，驗證 gate 類型（HUMAN_CONFIRM/AUTO/SKIP）
+- `GateHandler`：gate 執行與狀態記錄（PASSED/BLOCKED/SKIPPED）
+- `FlowExecutor`：步驟序列執行 + 錯誤處理 + GateHandler 整合
+- 27 個 unit tests（flow-parser/gate-handler/flow-executor）
+
+#### Commit Flow Gate（XSPEC-088 / XSPEC-086 Phase 1）
+- `checkFlowGate()`：runtime 攔截未完成閘門的 git commit 嘗試
+- `devap commit`：三步 commit 流程命令（generate → HUMAN_CONFIRM → execute）
+- `.devap/flows/commit.flow.yaml`：commit 流程定義
+- 4 個 integration tests
+
+#### Release Command（XSPEC-089 / XSPEC-086 Phase 6）
+- `VersionBumper`：atomic 版本號更新 + rollback（所有 versionFiles 或全部回滾）
+- `ChangelogUpdater`：將 [Unreleased] 移至 [version] + 更新日期
+- `ReleaseFlow` runner：整合 VersionBumper + ChangelogUpdater + git tag
+- `NpmPlatformAdapter`：`gh release create` + dist-tag 自動推斷（latest/next/beta）
+- `PipPlatformAdapter`：`python -m build` + `twine upload`
+- `CargoPlatformAdapter`：`cargo publish`
+- CLI：`devap release --bump <major|minor|patch> [--dry-run|--platform npm|pip|cargo|--skip-confirm]`
+
+#### Cross-Project Installation（XSPEC-086 Phase 7）
+- DevAP 安裝至 dev-platform（dogfooding — commit gate 保護規劃流程）
+- DevAP 安裝至 VibeOps
+- DevAP 安裝至 UDS（dogfooding — `devap release` 取代 `scripts/bump-version.sh`）
 
 #### Harness Engineering — Phase 1, 2 & 3（#4, #5, #6, SPEC-007）
 - CLAUDE.md 注入增強 — 品質要求與 Harness 提示 sections 自動注入 sub-agent prompt（#4）

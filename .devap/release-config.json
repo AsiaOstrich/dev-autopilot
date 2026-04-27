@@ -1,0 +1,18 @@
+{
+  "versionFiles": [
+    "package.json",
+    "packages/core/package.json",
+    "packages/cli/package.json",
+    "packages/adapter-claude/package.json",
+    "packages/adapter-vibeops/package.json",
+    "packages/adapter-cli/package.json",
+    "packages/adapter-opencode/package.json"
+  ],
+  "changelog": {
+    "path": "CHANGELOG.md"
+  },
+  "git": {
+    "tagPrefix": "v",
+    "commitMessage": "chore(release): v{{version}}. 發布 v{{version}}。"
+  }
+}
