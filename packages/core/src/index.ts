@@ -25,6 +25,25 @@ export { RecoveryRegistry, DEFAULT_RECIPES } from "./recovery-registry.js";
 export { loadPlan, listPlans, PlanNotFoundError, MultiPlanFileRequiresPlanFlagError } from "./plan-loader.js";
 // XSPEC-087: 統一流程定義模型
 export { FlowParser, GateHandler, FlowExecutor, type StepHandlerMap } from "./flow/index.js";
+// XSPEC-093: Deploy 原語
+export {
+  DeployRunner,
+  checkReleaseTagExistsAsync,
+  checkStagingRequired,
+  requireProdHITL,
+  getCurrentVersion,
+  type DeployRunnerOptions,
+  type GateCheckResult,
+  type DeployTargetType,
+  type EnvironmentConfig,
+  type DeployConfig,
+  type DeployState,
+  type DeployResult,
+  type HealthCheckResult,
+  type DeployShellExecutor,
+  type DeployHttpChecker,
+  type DeployCommandResult,
+} from "./deploy/index.js";
 // XSPEC-092: Token 預算管理
 export {
   TokenBudgetTracker,
