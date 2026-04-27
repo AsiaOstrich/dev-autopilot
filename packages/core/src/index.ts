@@ -25,13 +25,22 @@ export { RecoveryRegistry, DEFAULT_RECIPES } from "./recovery-registry.js";
 export { loadPlan, listPlans, PlanNotFoundError, MultiPlanFileRequiresPlanFlagError } from "./plan-loader.js";
 // XSPEC-087: 統一流程定義模型
 export { FlowParser, GateHandler, FlowExecutor, type StepHandlerMap } from "./flow/index.js";
-// XSPEC-089: Release 流程（version bump + CHANGELOG）
+// XSPEC-089: Release 流程（version bump + CHANGELOG + Platform Adapter + ReleaseFlow runner）
 export {
   VersionBumper,
   bumpVersion,
   ChangelogUpdater,
+  inferDistTag,
+  NpmPlatformAdapter,
+  ReleaseFlow,
   type BumpLevel,
   type VersionFileSpec,
   type VersionBumpPlan,
   type ChangelogUpdatePlan,
+  type Platform,
+  type PlatformAdapter,
+  type PublishOptions,
+  type PublishResult,
+  type ReleaseStep,
+  type ReleaseFlowOptions,
 } from "./release/index.js";
