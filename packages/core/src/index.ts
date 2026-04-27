@@ -66,6 +66,20 @@ export {
   type HITLGateResult,
   type HITLConfig,
 } from "./hitl-gate.js";
+// XSPEC-094: Multi-Agent 協調（Phase 1）
+export {
+  MemoryGuard,
+  type MemoryGuardConfig,
+  type MemoryCheckResult,
+  type MemoryProvider,
+} from "./memory-guard.js";
+export {
+  AgentPool,
+  type AgentPoolConfig,
+  type SpawnDecision,
+  type SpawnResult,
+  type AgentPoolState,
+} from "./agent-pool.js";
 // XSPEC-090: Spec 合規閘門
 export {
   checkSpecGate,

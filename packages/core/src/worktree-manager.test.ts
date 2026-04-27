@@ -4,7 +4,7 @@
  * 測試 worktree 管理的核心邏輯，使用 mock 避免實際操作 git。
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { WorktreeManager, type WorktreeInfo } from "./worktree-manager.js";
 
 // Mock child_process
@@ -204,4 +204,60 @@ describe("WorktreeManager", () => {
   });
 
   // AC-3: 既有 8 個測試已在上方覆蓋 regression 驗證
+
+  // ============================================================
+  // XSPEC-094 AC-5: 自動清理（scheduleCleanup / cancelScheduledCleanup）
+  // ============================================================
+
+  describe("scheduleCleanup / cancelScheduledCleanup (AC-5)", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("[AC-5] scheduleCleanup 在延遲後自動清理 worktree", async () => {
+      await manager.create("T-001");
+      expect(manager.getWorktree("T-001")).toBeDefined();
+
+      manager.scheduleCleanup("T-001", 100);
+      expect(manager.getWorktree("T-001")).toBeDefined(); // 尚未清理
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(manager.getWorktree("T-001")).toBeUndefined(); // 已清理
+    });
+
+    it("[AC-5] cancelScheduledCleanup 取消排定的清理", async () => {
+      await manager.create("T-001");
+      manager.scheduleCleanup("T-001", 100);
+      manager.cancelScheduledCleanup("T-001");
+
+      await vi.advanceTimersByTimeAsync(200);
+      expect(manager.getWorktree("T-001")).toBeDefined(); // 未被清理
+    });
+
+    it("[AC-5] 重複呼叫 scheduleCleanup 以最後一次為準", async () => {
+      await manager.create("T-001");
+      manager.scheduleCleanup("T-001", 500);
+      manager.scheduleCleanup("T-001", 100); // 覆蓋前一次
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(manager.getWorktree("T-001")).toBeUndefined();
+    });
+
+    it("[AC-5] cleanupAll 取消所有排定的清理 timer", async () => {
+      await manager.create("T-001");
+      await manager.create("T-002");
+      manager.scheduleCleanup("T-001", 500);
+      manager.scheduleCleanup("T-002", 500);
+
+      await manager.cleanupAll();
+      // cleanupAll 後不應因 timer 觸發而出現已刪除記錄的二次清理錯誤
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(manager.getWorktree("T-001")).toBeUndefined();
+      expect(manager.getWorktree("T-002")).toBeUndefined();
+    });
+  });
 });

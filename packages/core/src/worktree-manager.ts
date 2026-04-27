@@ -53,6 +53,8 @@ export class WorktreeManager {
   private readonly worktreeDir: string;
   /** 已建立的 worktree 記錄 */
   private readonly worktrees = new Map<string, WorktreeInfo>();
+  /** AC-5: 排定自動清理的 timer handles */
+  private readonly scheduledCleanups = new Map<string, ReturnType<typeof setTimeout>>();
 
   /**
    * @param rootDir - 專案根目錄（git repo 所在位置）
@@ -207,9 +209,40 @@ export class WorktreeManager {
   }
 
   /**
-   * 清理所有已建立的 worktree
+   * AC-5: 排定在指定延遲後自動清理 worktree（預設 30 秒）
+   *
+   * @param taskId - Task ID
+   * @param delayMs - 延遲毫秒數，預設 30_000
+   */
+  scheduleCleanup(taskId: string, delayMs = 30_000): void {
+    this.cancelScheduledCleanup(taskId);
+    const handle = setTimeout(() => {
+      this.scheduledCleanups.delete(taskId);
+      this.cleanup(taskId).catch(() => {});
+    }, delayMs);
+    this.scheduledCleanups.set(taskId, handle);
+  }
+
+  /**
+   * AC-5: 取消已排定的自動清理（例如任務需要繼續使用 worktree）
+   *
+   * @param taskId - Task ID
+   */
+  cancelScheduledCleanup(taskId: string): void {
+    const handle = this.scheduledCleanups.get(taskId);
+    if (handle !== undefined) {
+      clearTimeout(handle);
+      this.scheduledCleanups.delete(taskId);
+    }
+  }
+
+  /**
+   * 清理所有已建立的 worktree（同時取消所有排定的自動清理）
    */
   async cleanupAll(): Promise<void> {
+    for (const taskId of this.scheduledCleanups.keys()) {
+      this.cancelScheduledCleanup(taskId);
+    }
     const taskIds = [...this.worktrees.keys()];
     for (const taskId of taskIds) {
       await this.cleanup(taskId);
