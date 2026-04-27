@@ -1,5 +1,8 @@
 # Code Check-in Standards - AI Optimized (v2 Dual-Layer)
 # Source: core/checkin-standards.md
+# DEPRECATION NOTICE (XSPEC-086 Phase 3, 2026-04-28):
+#   Gate execution sequence extracted to DevAP standards/flow/checkin-gate-sequence.ai.yaml.
+#   This file retains checklist items, philosophy, and quality definitions.
 
 standard:
   id: checkin-standards

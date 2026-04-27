@@ -1,3 +1,8 @@
+# DEPRECATION NOTICE (XSPEC-086 Phase 3, 2026-04-28):
+#   Gate execution sequence (pre-push-gates rule ordering) extracted to
+#   DevAP standards/flow/push-gate-sequence.ai.yaml.
+#   This file retains gate definitions, config schema, and receipt format.
+
 id: push-standards
 meta:
   version: "1.0.0"

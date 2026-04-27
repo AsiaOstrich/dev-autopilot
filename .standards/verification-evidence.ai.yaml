@@ -1,6 +1,10 @@
 # Verification Evidence Standard - AI Optimized
 # Source: core/verification-evidence.md
 # Inspired by Superpowers verification-before-completion (MIT)
+# DEPRECATION NOTICE (XSPEC-086 Phase 3, 2026-04-28):
+#   RED-GREEN cycle orchestration and VE rule trigger flows extracted to
+#   DevAP standards/flow/verification-evidence-collection.ai.yaml.
+#   This file retains evidence_format, trust_rules, and physical_spec definitions.
 
 standard:
   id: verification-evidence

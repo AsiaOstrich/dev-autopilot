@@ -1,5 +1,9 @@
 # Git Workflow Standards - AI Optimized
 # Source: core/git-workflow.md
+# DEPRECATION NOTICE (XSPEC-086 Phase 3, 2026-04-28):
+#   Flow orchestration (decision matrix, merge strategy selection) has been extracted to
+#   DevAP standards/flow/git-workflow-decisions.ai.yaml.
+#   This file retains activity definitions only (branch naming, branch types, quick_reference).
 
 id: git-workflow
 meta:
