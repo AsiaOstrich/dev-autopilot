@@ -14,6 +14,8 @@ export {
   type PublishResult,
 } from "./platform-adapter.js";
 export { NpmPlatformAdapter } from "./npm-adapter.js";
+export { PipPlatformAdapter, type PipPublishOptions } from "./pip-adapter.js";
+export { CargoPlatformAdapter, type CargoPublishOptions } from "./cargo-adapter.js";
 export {
   ReleaseFlow,
   type ReleaseStep,

@@ -32,6 +32,8 @@ export {
   ChangelogUpdater,
   inferDistTag,
   NpmPlatformAdapter,
+  PipPlatformAdapter,
+  CargoPlatformAdapter,
   ReleaseFlow,
   type BumpLevel,
   type VersionFileSpec,
@@ -43,4 +45,6 @@ export {
   type PublishResult,
   type ReleaseStep,
   type ReleaseFlowOptions,
+  type PipPublishOptions,
+  type CargoPublishOptions,
 } from "./release/index.js";
