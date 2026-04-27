@@ -148,3 +148,82 @@ export function normalizeSecurityDecision(value: SecurityDecision | boolean): Se
   }
   return value;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Commit Flow Gate（XSPEC-088）
+// 防止 AI 助手繞過 HUMAN_CONFIRM 閘門直接執行 git commit
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 被閘門保護的命令映射表
+ *
+ * key: 指令前綴（小寫）
+ * value: { flow: 必須完成的流程名稱, requiredStep: 必須通過的閘門步驟 id }
+ */
+export const FLOW_GATED_COMMANDS: ReadonlyMap<
+  string,
+  { flow: string; requiredStep: string }
+> = new Map([["git commit", { flow: "commit", requiredStep: "user-confirm" }]]);
+
+/** commit 閘門攔截結果 */
+export interface CommitGateCheckResult {
+  /** 是否被閘門阻止 */
+  blocked: boolean;
+  /** 被阻止時的訊息（顯示給 AI 助手） */
+  message?: string;
+  /** 應該執行的流程名稱（被阻止時提示） */
+  requiredFlow?: string;
+}
+
+/** 流程狀態（由呼叫端管理，DevAP orchestrator 維護此狀態） */
+export interface FlowState {
+  /** 已完成的步驟 id 列表 */
+  completedSteps: string[];
+  /** 是否由人類直接操作（true → 不攔截） */
+  isHumanContext?: boolean;
+}
+
+/**
+ * 檢查指令是否需要先完成對應流程閘門
+ *
+ * 攔截邏輯：
+ * 1. 人類使用者操作 → 不攔截
+ * 2. 指令不在 FLOW_GATED_COMMANDS → 不攔截
+ * 3. 必要步驟未完成 → 阻止並說明原因
+ *
+ * @param command - 要執行的 shell 指令
+ * @param flowState - 目前的流程狀態
+ * @returns CommitGateCheckResult
+ */
+export function checkFlowGate(command: string, flowState: FlowState): CommitGateCheckResult {
+  // 人類使用者直接操作 → 不攔截
+  if (flowState.isHumanContext) {
+    return { blocked: false };
+  }
+
+  const lowerCommand = command.trim().toLowerCase();
+
+  for (const [prefix, gate] of FLOW_GATED_COMMANDS) {
+    if (lowerCommand.startsWith(prefix)) {
+      const stepCompleted = flowState.completedSteps.includes(gate.requiredStep);
+
+      if (!stepCompleted) {
+        // 判斷是哪個步驟缺失（generate-message 比 user-confirm 更優先顯示）
+        const generateCompleted = flowState.completedSteps.includes("generate-message");
+        const message = generateCompleted
+          ? `需要使用者確認 commit message（Step 2）。請先執行 devap run ${gate.flow} 並在 HUMAN_CONFIRM 閘門輸入確認。`
+          : `需先完成 commit message 生成（Step 1）。請先執行 devap run ${gate.flow}。`;
+
+        return {
+          blocked: true,
+          message,
+          requiredFlow: gate.flow,
+        };
+      }
+
+      return { blocked: false };
+    }
+  }
+
+  return { blocked: false };
+}

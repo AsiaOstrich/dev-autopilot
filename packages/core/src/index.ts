@@ -1,7 +1,7 @@
 export * from "./types.js";
 export { validatePlan } from "./plan-validator.js";
 export { orchestrate, topologicalSort, topologicalLayers, mergeDefaults } from "./orchestrator.js";
-export { createDefaultSafetyHook, detectDangerousCommand, detectHardcodedSecrets, normalizeSecurityDecision } from "./safety-hook.js";
+export { createDefaultSafetyHook, detectDangerousCommand, detectHardcodedSecrets, normalizeSecurityDecision, checkFlowGate, FLOW_GATED_COMMANDS, type CommitGateCheckResult, type FlowState } from "./safety-hook.js";
 export { CircuitBreaker, CircuitOpenError, type CircuitBreakerConfig, type CircuitBreakerState } from "./circuit-breaker.js";
 export { WorktreeManager, type WorktreeInfo } from "./worktree-manager.js";
 export { generateClaudeMd, writeClaudeMd, type ClaudeMdOptions } from "./claudemd-generator.js";
