@@ -1,0 +1,89 @@
+# Push Gate Sequence Flow — DevAP Flow Standard
+# Phase 3 split from UDS push-standards.ai.yaml (hybrid standard)
+# Gate definitions (protected_branches, gate config, receipt schema) remain in UDS.
+# This file owns: pre-push gate execution order + abort/proceed logic.
+
+id: push-gate-sequence
+meta:
+  version: "1.0.0"
+  source_standard: push-standards.ai.yaml (UDS)
+  split_phase: "XSPEC-086 Phase 3"
+  description: >
+    Orchestration flow for the pre-push gate sequence.
+    Gate definitions and configuration remain in UDS push-standards.ai.yaml.
+
+steps:
+  - id: detect-protected-branch
+    trigger: "executing git push"
+    action: check
+    condition: "target branch matches protected_branches pattern"
+    on_true:
+      action: hitl
+      prompt: "⚠️ 即將推送至受保護分支 {{branch}}，確認繼續？"
+      on_reject: abort
+    on_false: next
+
+  - id: detect-force-push
+    action: check
+    condition: "push flags include --force or --force-with-lease"
+    on_true:
+      action: sequence
+      steps:
+        - action: show
+          message: "將覆蓋遠端 {{overwritten_count}} 個 commit（作者：{{authors}}）"
+        - action: hitl
+          prompt: "確認強制推送？輸入 y 繼續"
+          on_reject: abort
+    on_false: next
+
+  - id: run-gates
+    action: sequence
+    description: "依序執行 push_gates 設定的閘門"
+    gates:
+      - id: lint
+        command: "{{lint_command}}"
+        on_failure: abort-with-message
+      - id: test
+        command: "{{test_command}}"
+        on_failure: abort-with-message
+      - id: ac-coverage
+        optional: true
+        command: "{{coverage_command}}"
+        on_failure: warn
+      - id: type-check
+        optional: true
+        command: "{{type_check_command}}"
+        on_failure: abort-with-message
+      - id: security-scan
+        optional: true
+        command: "{{security_scan_command}}"
+        on_failure: abort-with-message
+
+  - id: execute-push
+    action: execute
+    command: "git push {{remote}} {{branch}}"
+    on_failure:
+      action: show-error
+      message: "推送失敗：{{error}}"
+
+  - id: emit-receipt
+    action: record
+    format: push_receipt
+    fields:
+      - branch
+      - commit_sha
+      - gates_passed
+      - gates_skipped
+      - force_push
+      - timestamp
+
+  - id: pr-integration
+    condition: "auto_pr=true AND repo_mode=team AND no open PR for branch"
+    action: suggest
+    message: "建議執行 devap pr-create 為此分支建立 PR"
+
+abort_behavior:
+  abort-with-message:
+    action: exit
+    message: "❌ Gate 失敗（{{gate_id}}），推送中止。"
+    exit_code: 1

@@ -1,0 +1,83 @@
+# Pipeline Security Gate Sequence Flow — DevAP Flow Standard
+# Phase 3 split from UDS pipeline-security-gates.ai.yaml (hybrid standard)
+# Gate definitions (tools, block_on, failure_behavior) remain in UDS.
+# This file owns: gate ordering across pipeline stages + escalation logic.
+
+id: pipeline-security-gate-sequence
+meta:
+  version: "1.0.0"
+  source_standard: pipeline-security-gates.ai.yaml (UDS)
+  split_phase: "XSPEC-086 Phase 3"
+  description: >
+    Orchestration flow for security gates across CI/CD pipeline stages.
+    Gate tool definitions and severity configurations remain in UDS.
+
+pipeline_stages:
+  - id: pre-commit
+    trigger: "git commit"
+    gates:
+      - type: secrets_scan
+        never_skip: true
+        on_finding:
+          action: abort
+          message: "🚨 Secret detected — commit blocked. Remove secrets before committing."
+
+  - id: post-build
+    trigger: "build stage complete"
+    gates:
+      - type: sast
+        on_Critical:
+          action: abort
+          notify: security-team
+          message: "🚨 SAST Critical finding — pipeline blocked."
+        on_High:
+          action: abort
+          notify: team-lead
+        on_Medium:
+          action: warn
+        on_Low:
+          action: log
+
+  - id: package-stage
+    trigger: "packaging/containerization stage"
+    gates:
+      - type: sca_and_sbom
+        on_Critical_with_fix:
+          action: abort
+          message: "🚨 Critical CVE with available fix — update dependency before packaging."
+        on_High_CVE:
+          action: warn
+        sbom_upload: true
+
+  - id: post-staging-deploy
+    trigger: "staging deploy complete"
+    gates:
+      - type: dast
+        on_Critical:
+          action: require_approval
+          prompt: "DAST Critical finding on staging. Approve to proceed to prod? (y=approve, n=block)"
+          on_reject: abort
+        on_High:
+          action: require_approval
+        on_Medium:
+          action: warn
+
+escalation_flow:
+  steps:
+    - id: check-bypass-request
+      condition: "bypass requested"
+      action: hitl
+      prompt: "安全閘門繞過請求（{{gate_type}}）。請提供書面安全核准後繼續。"
+      on_reject: abort
+      audit_log: true
+
+    - id: emergency-bypass
+      condition: "emergency-bypass token provided"
+      action: execute-with-audit
+      message: "⚠️ Emergency bypass activated for {{gate_type}}. Post-incident review required."
+      audit_log: true
+      time_limited: true
+
+enforcement:
+  principle: "All security gates are mandatory — no silent skips."
+  exception_requires: "written security approval + audit trail"

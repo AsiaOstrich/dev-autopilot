@@ -1,0 +1,93 @@
+# Git Workflow Decision Flow — DevAP Flow Standard
+# Phase 3 split from UDS git-workflow.ai.yaml (hybrid standard)
+# Activity definition (branch naming, branch types) remains in UDS.
+# This file owns: workflow strategy selection + merge strategy selection logic.
+
+id: git-workflow-decisions
+meta:
+  version: "1.0.0"
+  source_standard: git-workflow.ai.yaml (UDS)
+  split_phase: "XSPEC-086 Phase 3"
+  description: >
+    Orchestration flow for selecting and enforcing a git workflow strategy
+    and merge strategy. Complements UDS git-workflow.ai.yaml (activity definition).
+
+workflow_selection_flow:
+  trigger: "starting a new project or onboarding a new contributor"
+  steps:
+    - id: assess-deploy-frequency
+      action: ask
+      question: "How often do you deploy to production?"
+      choices:
+        - answer: "Multiple times per day"
+          next: select-trunk-based
+        - answer: "Weekly to bi-weekly"
+          next: select-github-flow
+        - answer: "Monthly or longer"
+          next: select-gitflow
+
+    - id: select-trunk-based
+      action: configure
+      value: trunk-based
+      next: assess-feature-flags
+
+    - id: select-github-flow
+      action: configure
+      value: github-flow
+      next: document-in-contributing
+
+    - id: select-gitflow
+      action: configure
+      value: gitflow
+      next: document-in-contributing
+
+    - id: assess-feature-flags
+      action: check
+      condition: "team has feature flag infrastructure"
+      on_true: document-in-contributing
+      on_false:
+        action: warn
+        message: "Trunk-based development requires feature flags. Set up flagging before proceeding."
+        next: document-in-contributing
+
+    - id: document-in-contributing
+      action: write
+      target: "CONTRIBUTING.md"
+      content: "Selected workflow: {{workflow}} — enforced via DevAP"
+
+merge_strategy_flow:
+  trigger: "merging a feature/fix branch into main"
+  steps:
+    - id: assess-merge-type
+      action: check
+      conditions:
+        - condition: "branch has single commit"
+          next: use-fast-forward
+        - condition: "branch has multiple commits but clean history preferred"
+          next: use-squash
+        - condition: "branch history preservation required"
+          next: use-merge-commit
+
+    - id: use-fast-forward
+      action: execute
+      command: "git merge --ff-only {{branch}}"
+      on_failure: use-squash
+
+    - id: use-squash
+      action: execute
+      command: "git merge --squash {{branch}}"
+      next: commit-squashed
+
+    - id: commit-squashed
+      action: execute
+      command: "git commit"
+
+    - id: use-merge-commit
+      action: execute
+      command: "git merge --no-ff {{branch}} -m \"merge: {{branch}}\""
+
+gate_enforcement:
+  pre_branch_checklist:
+    - "No unmerged branches from same author older than 7 days"
+    - "Local branch is synced with remote (git fetch)"
+    - "All tests pass on current HEAD"

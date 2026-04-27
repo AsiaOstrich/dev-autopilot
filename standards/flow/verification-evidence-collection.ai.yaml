@@ -1,0 +1,86 @@
+# Verification Evidence Collection Flow — DevAP Flow Standard
+# Phase 3 split from UDS verification-evidence.ai.yaml (hybrid standard)
+# Evidence format definition, trust rules, physical_spec remain in UDS.
+# This file owns: RED-GREEN cycle orchestration + VE rule trigger flows.
+
+id: verification-evidence-collection
+meta:
+  version: "1.0.0"
+  source_standard: verification-evidence.ai.yaml (UDS)
+  split_phase: "XSPEC-086 Phase 3"
+  description: >
+    Orchestration flow for collecting verification evidence.
+    Evidence format schema and trust rules remain in UDS verification-evidence.ai.yaml.
+
+red_green_cycle_flow:
+  trigger: "bug fix or regression test requirement"
+  steps:
+    - id: run-red
+      action: execute
+      description: "Run test BEFORE fix to confirm it fails (RED)"
+      command: "{{test_command}}"
+      expected: fail
+      on_unexpected_pass:
+        action: warn
+        message: "⚠️ 測試在修復前就通過了（測試可能不正確，或問題已不存在）"
+      record:
+        phase: RED
+        fields: [command, exit_code, output, timestamp]
+
+    - id: apply-fix
+      action: checkpoint
+      description: "Apply the fix — agent executes code changes here"
+
+    - id: run-green
+      action: execute
+      description: "Run test AFTER fix to confirm it passes (GREEN)"
+      command: "{{test_command}}"
+      expected: pass
+      on_failure:
+        action: abort
+        message: "❌ 修復後測試仍未通過。請繼續修復。"
+      record:
+        phase: GREEN
+        fields: [command, exit_code, output, timestamp]
+
+    - id: emit-evidence
+      action: record
+      format: verification_evidence
+      fields:
+        - red_evidence
+        - green_evidence
+        - fix_description
+
+rule_trigger_flows:
+  VE-001:
+    trigger: "agent reports success without verification_evidence"
+    flow:
+      - action: downgrade-status
+        from: done
+        to: done_with_concerns
+      - action: request
+        message: "請提供驗證證據（command + exit_code + output + timestamp）"
+
+  VE-002:
+    trigger: "exit_code != 0 in evidence"
+    flow:
+      - action: mark-failed
+        message: "驗證失敗（exit_code={{ exit_code }}）"
+      - action: trigger
+        target: fix-loop
+        context: "verification_evidence"
+
+  VE-003:
+    trigger: "bug fix without RED-GREEN cycle evidence"
+    flow:
+      - action: request
+        message: "Bug fix 需要提供 RED → GREEN 循環的兩階段證據"
+      - action: gate
+        until: "RED and GREEN evidence both present"
+
+  VE-004:
+    trigger: "evidence output exceeds 2000 characters"
+    flow:
+      - action: truncate
+        max_chars: 2000
+        preserve: ["error messages", "summary lines", "exit code"]

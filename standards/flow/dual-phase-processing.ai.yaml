@@ -1,0 +1,85 @@
+# Dual-Phase Output Processing Flow — DevAP Flow Standard
+# Phase 3 split from UDS dual-phase-output.ai.yaml (hybrid standard)
+# Format definition, prompt_template, applicable_agents, token_impact remain in UDS.
+# This file owns: post-processing flow (extract → discard → fallback).
+
+id: dual-phase-processing
+meta:
+  version: "1.0.0"
+  source_standard: dual-phase-output.ai.yaml (UDS)
+  split_phase: "XSPEC-086 Phase 3"
+  description: >
+    Post-processing orchestration for dual-phase LLM output.
+    Format definitions and prompt templates remain in UDS dual-phase-output.ai.yaml.
+
+processing_flow:
+  trigger: "LLM response received from any review/judge agent"
+  steps:
+    - id: extract-analysis
+      action: regex-extract
+      pattern: "<analysis>([\\s\\S]*?)</analysis>"
+      target: analysis_block
+      on_missing:
+        action: log
+        level: debug
+        code: DPO-002
+        message: "[DPO-002] analysis tag missing — processing full response as-is"
+
+    - id: discard-analysis
+      action: discard
+      target: analysis_block
+      rationale: "Analysis is scratchpad — must not persist in context or conversation history"
+
+    - id: extract-summary
+      action: regex-extract
+      pattern: "<summary>([\\s\\S]*?)</summary>"
+      target: summary_block
+      on_missing:
+        action: fallback
+        next: fallback-handler
+
+    - id: parse-summary-fields
+      action: parse-yaml
+      source: summary_block
+      required_fields: [decision, confidence, findings, next_action]
+      on_missing_field:
+        action: log
+        level: error
+        code: DPO-003
+        message: "[DPO-003] required summary field absent — parsing error"
+
+    - id: validate-decision
+      action: validate
+      field: decision
+      allowed_values: [approved, rejected, needs_revision]
+      on_invalid:
+        action: log
+        level: warn
+        message: "Unknown decision value: {{decision}}"
+
+    - id: emit-result
+      action: return
+      payload: summary_block
+
+  fallback-handler:
+    trigger: "summary tag not found"
+    steps:
+      - action: log
+        level: warn
+        code: DPO-001
+        message: "[WARN] dual-phase format missing in response, fallback to full response (DPO-001)"
+      - action: use-full-response
+        as: summary_block
+      - action: continue
+        next: emit-result
+
+phase_switch_logic:
+  description: "When to switch from analysis phase to summary phase"
+  rules:
+    - id: auto-switch
+      condition: "</analysis> tag encountered"
+      action: switch-to-summary-phase
+    - id: timeout-switch
+      condition: "response exceeds max_tokens without </analysis>"
+      action: treat-as-analysis-only
+      fallback: use-full-response

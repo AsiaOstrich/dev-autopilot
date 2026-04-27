@@ -1,0 +1,85 @@
+# Check-in Gate Sequence Flow — DevAP Flow Standard
+# Phase 3 split from UDS checkin-standards.ai.yaml (hybrid standard)
+# Checklist items and philosophy remain in UDS checkin-standards.ai.yaml.
+# This file owns: gate execution order + abort/escalation logic.
+
+id: checkin-gate-sequence
+meta:
+  version: "1.0.0"
+  source_standard: checkin-standards.ai.yaml (UDS)
+  split_phase: "XSPEC-086 Phase 3"
+  description: >
+    Orchestration flow for the code check-in gate sequence.
+    Checklist item definitions remain in UDS checkin-standards.ai.yaml.
+
+steps:
+  - id: build-verification
+    action: check-all
+    description: "Build must succeed before any other gate"
+    items:
+      - "Code compiles successfully (zero errors)"
+      - "Zero build warnings"
+      - "All dependencies installed"
+    on_failure:
+      action: abort
+      message: "❌ Build 驗證失敗，其餘閘門已跳過。請先修復編譯錯誤。"
+
+  - id: test-verification
+    action: check-all
+    description: "All tests must pass"
+    items:
+      - "All existing tests pass"
+      - "New code has corresponding tests"
+      - "Bug fixes include regression tests"
+    command: "{{test_command}}"
+    on_failure:
+      action: abort
+      message: "❌ 測試驗證失敗，請確保所有測試通過後再簽入。"
+
+  - id: code-quality
+    action: check-all
+    description: "Code quality gates"
+    items:
+      - "No lint errors"
+      - "No hardcoded secrets"
+      - "No SQL/XSS injection vulnerabilities"
+    command: "{{lint_command}}"
+    on_failure:
+      action: abort
+      message: "❌ 程式碼品質閘門失敗。"
+
+  - id: documentation
+    action: check-all
+    description: "Documentation updates (soft gate)"
+    items:
+      - "API documentation updated if needed"
+      - "CHANGELOG [Unreleased] section updated for user-facing changes"
+    on_failure:
+      action: warn
+      message: "⚠️ 文件可能需要更新，建議在合併前補齊。"
+
+  - id: workflow-compliance
+    action: check-all
+    description: "Git workflow compliance"
+    items:
+      - "Branch naming follows <type>/<description> format"
+      - "Commit message follows project convention"
+    on_failure:
+      action: abort
+      message: "❌ Workflow 合規性閘門失敗。"
+
+  - id: emit-checkin-summary
+    action: record
+    format: checkin_summary
+    fields:
+      - gates_passed
+      - gates_warned
+      - timestamp
+      - commit_sha
+
+gate_order_rationale: >
+  Build first (fastest feedback on hard errors) →
+  Tests (catch regressions before quality checks) →
+  Code quality (lint/security, requires passing build) →
+  Documentation (soft gate, non-blocking warning) →
+  Workflow compliance (final gate before commit).
