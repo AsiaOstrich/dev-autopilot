@@ -1255,3 +1255,81 @@ export interface ValidationResult {
   /** 錯誤訊息列表 */
   errors: string[];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Flow Definition Model（XSPEC-087）
+// 統一流程定義格式：取代雙軌 TaskPlan JSON + workflow YAML 並存局面。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 閘門類型：決定 Orchestrator 如何處理閘門步驟 */
+export type GateType = "HUMAN_CONFIRM" | "AUTO_PASS" | "POLICY_CHECK";
+
+/** 流程步驟類型 */
+export type FlowStepType = "ai-task" | "shell" | "gate" | "platform-adapter";
+
+/** 單一流程步驟定義 */
+export interface FlowStep {
+  /** 步驟唯一識別碼（在流程內唯一） */
+  id: string;
+  /** 步驟類型 */
+  type: FlowStepType;
+  /** 人類可讀描述 */
+  description?: string;
+  /** shell 指令（type: shell 時使用，支援 {{variable}} 插值） */
+  command?: string;
+  /** 閘門類型（type: gate 時必填） */
+  gate?: GateType;
+  /** 閘門提示文字（顯示給使用者） */
+  prompt?: string;
+  /** 使用者拒絕時跳轉的步驟 id（HUMAN_CONFIRM 專用） */
+  on_reject?: string;
+  /** 前置依賴步驟 id 列表（所有依賴完成後才執行此步驟） */
+  requires?: string[];
+  /** AI 活動工具名稱（type: ai-task 時使用，格式：devap:tool-name） */
+  tool?: string;
+  /** 發布平台（type: platform-adapter 時使用） */
+  platform?: string;
+  /** 若為 true，步驟失敗不阻斷後續流程 */
+  optional?: boolean;
+}
+
+/** 流程定義（對應 .devap/flows/*.flow.yaml） */
+export interface FlowDefinition {
+  /** 流程唯一名稱（對應 .devap/flows/{name}.flow.yaml） */
+  name: string;
+  /** 人類可讀描述 */
+  description?: string;
+  /** 步驟列表（按宣告順序，依賴由 requires 欄位決定） */
+  steps: FlowStep[];
+}
+
+/** 閘門執行狀態 */
+export type GateStatus = "PENDING" | "SUSPENDED" | "PASSED" | "REJECTED";
+
+/** 閘門處理結果 */
+export interface GateResult {
+  /** 閘門最終狀態 */
+  status: GateStatus;
+  /** 是否暫停（等待使用者輸入） */
+  suspended: boolean;
+  /** 下一步驟 id（REJECTED 時指向 on_reject 步驟；PASSED 時由 FlowExecutor 決定） */
+  nextStepId?: string;
+  /** 是否已顯示提示給使用者 */
+  promptDisplayed: boolean;
+}
+
+/** 流程執行情境（變數插值 + 模式控制） */
+export interface FlowExecutionContext {
+  /** 流程變數（用於 {{variable}} 插值） */
+  variables?: Record<string, string>;
+  /** 乾燒模式：僅列出步驟，不執行 */
+  dryRun?: boolean;
+}
+
+/** 單一步驟的執行結果 */
+export interface FlowStepResult {
+  stepId: string;
+  status: "completed" | "suspended" | "skipped" | "failed";
+  output?: string;
+  error?: string;
+}

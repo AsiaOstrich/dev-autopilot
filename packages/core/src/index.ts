@@ -23,3 +23,5 @@ export { checkBranchDrift, type BranchDriftResult, type BranchDriftStatus, type 
 export { RecoveryRegistry, DEFAULT_RECIPES } from "./recovery-registry.js";
 // XSPEC-057: Multi-Plan Support
 export { loadPlan, listPlans, PlanNotFoundError, MultiPlanFileRequiresPlanFlagError } from "./plan-loader.js";
+// XSPEC-087: 統一流程定義模型
+export { FlowParser, GateHandler, FlowExecutor, type StepHandlerMap } from "./flow/index.js";
