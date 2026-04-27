@@ -25,6 +25,15 @@ export { RecoveryRegistry, DEFAULT_RECIPES } from "./recovery-registry.js";
 export { loadPlan, listPlans, PlanNotFoundError, MultiPlanFileRequiresPlanFlagError } from "./plan-loader.js";
 // XSPEC-087: 統一流程定義模型
 export { FlowParser, GateHandler, FlowExecutor, type StepHandlerMap } from "./flow/index.js";
+// XSPEC-090: Spec 合規閘門
+export {
+  checkSpecGate,
+  type XspecStatus,
+  type SpecGateMode,
+  type SpecMatch,
+  type SpecGateOptions,
+  type SpecGateResult,
+} from "./spec-gate.js";
 // XSPEC-089: Release 流程（version bump + CHANGELOG + Platform Adapter + ReleaseFlow runner）
 export {
   VersionBumper,

@@ -20,6 +20,7 @@ import { registerEvolutionCommand, loadEvolutionConfig, executeEvolutionAnalyze 
 import { createPushCommand } from "./commands/push.js";
 import { createReleaseCommand } from "./commands/release.js";
 import { createCommitCommand } from "./commands/commit.js";
+import { createStartCommand } from "./commands/start.js";
 import {
   orchestrate,
   validatePlan,
@@ -278,5 +279,6 @@ registerEvolutionCommand(program);      // XSPEC-004
 program.addCommand(createPushCommand()); // XSPEC-081
 program.addCommand(createReleaseCommand()); // XSPEC-089
 program.addCommand(createCommitCommand()); // XSPEC-088
+program.addCommand(createStartCommand());  // XSPEC-090
 
 program.parse();
