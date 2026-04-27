@@ -1,13 +1,17 @@
 /**
  * XSPEC-092 AC-5: devap status --cost
+ * XSPEC-094 AC-8: devap status --resources
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { buildCostReport, createStatusCommand } from "../status.js";
+import { buildCostReport, buildResourceReport, createStatusCommand } from "../status.js";
 
-// Mock existsSync and AccessReader
+// Mock node:fs
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(),
+  readdirSync: vi.fn(() => []),
+  statSync: vi.fn(() => ({ isDirectory: () => false })),
+  readFileSync: vi.fn(() => "[]"),
 }));
 
 vi.mock("@devap/core", async (importOriginal) => {
@@ -136,5 +140,23 @@ describe("createStatusCommand", () => {
     expect(consoleLog).toHaveBeenCalledWith(
       expect.stringContaining("正常")
     );
+  });
+
+  it("should_create_command_with_resources_option_AC8", () => {
+    const cmd = createStatusCommand();
+    expect(cmd.options.some((o) => o.long === "--resources")).toBe(true);
+  });
+});
+
+describe("buildResourceReport (AC-8)", () => {
+  it("should_include_memory_info_in_report", () => {
+    const report = buildResourceReport("/tmp/nonexistent-project");
+    expect(report).toContain("可用記憶體");
+    expect(report).toContain("Agent 資源佔用狀況");
+  });
+
+  it("should_show_no_active_agents_when_no_state_file", () => {
+    const report = buildResourceReport("/tmp/nonexistent-project");
+    expect(report).toContain("活躍 Agent：0");
   });
 });
