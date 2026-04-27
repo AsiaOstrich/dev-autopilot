@@ -25,6 +25,16 @@ export { RecoveryRegistry, DEFAULT_RECIPES } from "./recovery-registry.js";
 export { loadPlan, listPlans, PlanNotFoundError, MultiPlanFileRequiresPlanFlagError } from "./plan-loader.js";
 // XSPEC-087: 統一流程定義模型
 export { FlowParser, GateHandler, FlowExecutor, type StepHandlerMap } from "./flow/index.js";
+// XSPEC-091: HITL Gate 正式化
+export {
+  runHITLGate,
+  shouldRequireHITL,
+  type HITLDecision,
+  type HITLGateOptions,
+  type HITLAuditRecord,
+  type HITLGateResult,
+  type HITLConfig,
+} from "./hitl-gate.js";
 // XSPEC-090: Spec 合規閘門
 export {
   checkSpecGate,
