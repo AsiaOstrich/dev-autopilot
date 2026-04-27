@@ -21,6 +21,7 @@ import { createPushCommand } from "./commands/push.js";
 import { createReleaseCommand } from "./commands/release.js";
 import { createCommitCommand } from "./commands/commit.js";
 import { createStartCommand } from "./commands/start.js";
+import { createStatusCommand } from "./commands/status.js";
 import {
   orchestrate,
   validatePlan,
@@ -280,5 +281,6 @@ program.addCommand(createPushCommand()); // XSPEC-081
 program.addCommand(createReleaseCommand()); // XSPEC-089
 program.addCommand(createCommitCommand()); // XSPEC-088
 program.addCommand(createStartCommand());  // XSPEC-090
+program.addCommand(createStatusCommand()); // XSPEC-092
 
 program.parse();
