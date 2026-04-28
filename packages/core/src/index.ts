@@ -94,6 +94,15 @@ export {
 } from "./result-merger.js";
 // XSPEC-095: Mission 概念（Phase 1）
 export { MissionManager } from "./mission/mission-manager.js";
+// XSPEC-095: AutoSweep（Phase 3）
+export {
+  runAutoSweep,
+  SWEEP_PATTERNS,
+  type SweepFinding,
+  type SweepResult,
+  type AutoSweepOptions,
+  type SweepPattern,
+} from "./sweep/index.js";
 export {
   isMissionType,
   VALID_MISSION_TYPES,
