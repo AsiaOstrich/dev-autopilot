@@ -75,6 +75,7 @@ describe("MissionManager", () => {
     const { mgr, dir } = await makeManager();
     try {
       await mgr.create("genesis", "first");
+      await new Promise((r) => setTimeout(r, 5)); // ensure different ms timestamps for sort stability
       await mgr.create("renovate", "second");
       const all = await mgr.list();
       expect(all.length).toBe(2);
