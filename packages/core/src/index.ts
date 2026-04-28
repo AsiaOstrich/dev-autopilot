@@ -92,6 +92,15 @@ export {
   type MergeShellExecutor,
   type ResultMergerOptions,
 } from "./result-merger.js";
+// XSPEC-095: Mission 概念（Phase 1）
+export { MissionManager } from "./mission/mission-manager.js";
+export {
+  isMissionType,
+  VALID_MISSION_TYPES,
+  type MissionType,
+  type MissionStatus,
+  type MissionRecord,
+} from "./mission/mission-types.js";
 // XSPEC-090: Spec 合規閘門
 export {
   checkSpecGate,

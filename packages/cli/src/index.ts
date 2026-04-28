@@ -32,6 +32,8 @@ import { createAtddCommand } from "./commands/atdd.js";
 import { createPrCommand } from "./commands/pr.js";
 import { createHitlCommand } from "./commands/hitl.js";
 import { createRunIntentCommand } from "./commands/run-intent.js";
+import { createMissionCommand } from "./commands/mission.js";
+import { createFlowManagementCommand } from "./commands/flow-mgmt.js";
 import {
   orchestrate,
   validatePlan,
@@ -302,5 +304,7 @@ program.addCommand(createAtddCommand());   // XSPEC-086 Phase 4
 program.addCommand(createPrCommand());     // XSPEC-086 Phase 4
 program.addCommand(createHitlCommand());   // XSPEC-086 Phase 5a
 program.addCommand(createRunIntentCommand()); // XSPEC-086 Phase 5a
+program.addCommand(createMissionCommand());   // XSPEC-095 Phase 1
+program.addCommand(createFlowManagementCommand()); // XSPEC-095 Phase 4
 
 program.parse();
