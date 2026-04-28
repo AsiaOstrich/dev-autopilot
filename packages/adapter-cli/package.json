@@ -1,6 +1,6 @@
 {
   "name": "@devap/adapter-cli",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "CLI-based adapter for devap (uses claude -p subprocess)",
   "type": "module",
   "main": "dist/index.js",

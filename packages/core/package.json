@@ -1,6 +1,6 @@
 {
   "name": "@devap/core",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Core orchestration engine for devap",
   "type": "module",
   "main": "dist/index.js",
@@ -14,7 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@asiaostrich/telemetry-client": "github:AsiaOstrich/asiaostrich-telemetry-client#main",
+    "asiaostrich-telemetry-client": "^0.1.1",
     "ajv": "^8.18.0",
     "js-yaml": "^4.1.1"
   },

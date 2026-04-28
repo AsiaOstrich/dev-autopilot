@@ -97,9 +97,9 @@ importers:
         specifier: ^4.1.1
         version: 4.1.1
     optionalDependencies:
-      '@asiaostrich/telemetry-client':
-        specifier: github:AsiaOstrich/asiaostrich-telemetry-client#main
-        version: git+https://github.com/AsiaOstrich/asiaostrich-telemetry-client.git#147e6b5b3533d529f79a2a98a47a87ae7563582a
+      asiaostrich-telemetry-client:
+        specifier: ^0.1.1
+        version: 0.1.1
     devDependencies:
       '@devap/adapter-claude':
         specifier: workspace:*
@@ -128,12 +128,12 @@ importers:
 
   packages/core:
     dependencies:
-      '@asiaostrich/telemetry-client':
-        specifier: github:AsiaOstrich/asiaostrich-telemetry-client#main
-        version: git+https://github.com/AsiaOstrich/asiaostrich-telemetry-client.git#147e6b5b3533d529f79a2a98a47a87ae7563582a
       ajv:
         specifier: ^8.18.0
         version: 8.18.0
+      asiaostrich-telemetry-client:
+        specifier: ^0.1.1
+        version: 0.1.1
       js-yaml:
         specifier: ^4.1.1
         version: 4.1.1
@@ -158,11 +158,6 @@ packages:
     engines: {node: '>=18.0.0'}
     peerDependencies:
       zod: ^4.0.0
-
-  '@asiaostrich/telemetry-client@git+https://github.com/AsiaOstrich/asiaostrich-telemetry-client.git#147e6b5b3533d529f79a2a98a47a87ae7563582a':
-    resolution: {commit: 147e6b5b3533d529f79a2a98a47a87ae7563582a, repo: https://github.com/AsiaOstrich/asiaostrich-telemetry-client.git, type: git}
-    version: 0.1.0
-    engines: {node: '>=18.0.0'}
 
   '@esbuild/aix-ppc64@0.21.5':
     resolution: {integrity: sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==}
@@ -817,6 +812,10 @@ packages:
   argparse@2.0.1:
     resolution: {integrity: sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==}
 
+  asiaostrich-telemetry-client@0.1.1:
+    resolution: {integrity: sha512-pXwtLWYfURKB/qQOkgyINtYYFMitc+gZDdvYMaKjBnWIIEzwW7+6nsugKWTadhaF5HWWCKhFUlF535GQ90xq3A==}
+    engines: {node: '>=18.0.0'}
+
   assertion-error@2.0.1:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
     engines: {node: '>=12'}
@@ -1451,8 +1450,6 @@ snapshots:
       '@img/sharp-win32-arm64': 0.34.5
       '@img/sharp-win32-x64': 0.34.5
 
-  '@asiaostrich/telemetry-client@git+https://github.com/AsiaOstrich/asiaostrich-telemetry-client.git#147e6b5b3533d529f79a2a98a47a87ae7563582a': {}
-
   '@esbuild/aix-ppc64@0.21.5':
     optional: true
 
@@ -1891,6 +1888,8 @@ snapshots:
   any-promise@1.3.0: {}
 
   argparse@2.0.1: {}
+
+  asiaostrich-telemetry-client@0.1.1: {}
 
   assertion-error@2.0.1: {}
 

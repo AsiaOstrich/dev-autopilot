@@ -1,6 +1,6 @@
 {
   "name": "@devap/adapter-vibeops",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "VibeOps adapter for devap — integrates VibeOps 7+1 agents via HTTP API",
   "type": "module",
   "main": "dist/index.js",

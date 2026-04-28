@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-04-28
+
+> **Patch Release**: 修復 npm 發布流程 — 將 `@asiaostrich/telemetry-client` 依賴從 `github:` URL 改為 npm registry，解決 CI 與終端使用者無法安裝的問題。
+> v0.3.0、v0.4.0、v0.5.0 因 publish 失敗從未上 npm，功能已包含於本版。
+
+### Fixed
+- `packages/core/package.json`、`packages/cli/package.json`：`@asiaostrich/telemetry-client` 依賴改為 `^0.1.0`（npm），移除 `github:AsiaOstrich/asiaostrich-telemetry-client#main` git URL
+- 根因：telemetry-client repo 為 private，GH Actions 跨 repo git fetch 無法認證（exit 128）；v0.4.0 / v0.5.0 未建立 GitHub Release 導致 publish.yml 從未觸發
+
+### Added
+- `scripts/release.sh`：一鍵發版腳本（bump → lockfile → commit → tag → push → gh release create），防止再次漏建 GitHub Release
+
 ## [0.5.0] - 2026-04-28
 
 > **Minor Release**: XSPEC-095 全部完成 — Mission / Workflow / Sweep / Flow 四大模組 + 5 個新 CLI 命令、tests 1176→1231。

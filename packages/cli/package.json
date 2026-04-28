@@ -1,6 +1,6 @@
 {
   "name": "dev-autopilot",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Agent-agnostic unattended development orchestrator. Plan → Execute → Review.",
   "type": "module",
   "main": "dist/index.js",
@@ -46,7 +46,7 @@
     "js-yaml": "^4.1.1"
   },
   "optionalDependencies": {
-    "@asiaostrich/telemetry-client": "github:AsiaOstrich/asiaostrich-telemetry-client#main"
+    "asiaostrich-telemetry-client": "^0.1.1"
   },
   "devDependencies": {
     "@devap/adapter-claude": "workspace:*",
