@@ -8,7 +8,7 @@
 import { readFile, writeFile, rm, readdir, access, mkdir, stat } from "node:fs/promises";
 import { join, resolve, relative } from "node:path";
 import type { StorageBackend } from "./types.js";
-import type { TelemetryUploader } from "@asiaostrich/telemetry-client";
+import type { TelemetryUploader } from "asiaostrich-telemetry-client";
 
 /**
  * 本地檔案系統儲存後端
@@ -99,7 +99,7 @@ export class LocalStorageBackend implements StorageBackend {
 export class FileServerStorageBackend implements StorageBackend {
   /**
    * @param local - 委派的本地儲存後端
-   * @param uploader - 遙測上傳器（@asiaostrich/telemetry-client）
+   * @param uploader - 遙測上傳器（asiaostrich-telemetry-client）
    */
   constructor(
     private readonly local: LocalStorageBackend,

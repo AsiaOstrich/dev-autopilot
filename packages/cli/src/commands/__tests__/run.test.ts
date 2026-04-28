@@ -144,11 +144,11 @@ describe("XSPEC-049: createProgressEmitter", () => {
 // XSPEC-051: createOrchestrationTelemetry（CLI telemetry 初始化）
 // ============================================================
 
-// mock @asiaostrich/telemetry-client
+// mock asiaostrich-telemetry-client
 const mockUpload = vi.fn().mockResolvedValue(undefined);
 const MockTelemetryUploader = vi.fn().mockImplementation(() => ({ upload: mockUpload }));
 
-vi.mock("@asiaostrich/telemetry-client", () => ({
+vi.mock("asiaostrich-telemetry-client", () => ({
   TelemetryUploader: MockTelemetryUploader,
 }));
 
@@ -202,7 +202,7 @@ describe("XSPEC-051: createOrchestrationTelemetry", () => {
   it("AC-4: TelemetryUploader 動態 import 失敗時靜默回傳 undefined", async () => {
     process.env.ASIAOSTRICH_TELEMETRY_KEY = "test-key";
     // 模擬套件不可用
-    vi.doMock("@asiaostrich/telemetry-client", () => {
+    vi.doMock("asiaostrich-telemetry-client", () => {
       throw new Error("Module not found");
     });
     const { createOrchestrationTelemetry } = await import("../../telemetry.js");

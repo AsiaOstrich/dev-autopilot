@@ -61,7 +61,7 @@ export async function createOrchestrationTelemetry(): Promise<OrchestrationTelem
 
   // 2. 動態 import TelemetryUploader（套件未安裝時靜默跳過）
   try {
-    const { TelemetryUploader } = await import("@asiaostrich/telemetry-client");
+    const { TelemetryUploader } = await import("asiaostrich-telemetry-client");
     if (typeof TelemetryUploader !== "function") return undefined;
     return new TelemetryUploader({ serverUrl, apiKey });
   } catch {

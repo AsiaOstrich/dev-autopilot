@@ -319,7 +319,7 @@ export async function orchestrate(
   let fileServerBackend: FileServerStorageBackend | null = null;
 
   if (useFileServer) {
-    const { TelemetryUploader } = await import("@asiaostrich/telemetry-client");
+    const { TelemetryUploader } = await import("asiaostrich-telemetry-client");
     const uploader = new TelemetryUploader({
       serverUrl: historyConfig!.telemetryServer!,
       apiKey: historyConfig!.telemetryApiKey,

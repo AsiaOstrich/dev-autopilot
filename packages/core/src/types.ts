@@ -1005,7 +1005,7 @@ export type CheckpointCallback = (summary: CheckpointSummary) => Promise<Checkpo
 /**
  * Orchestrator 執行遙測用戶端（XSPEC-051）
  *
- * 鴨型別介面，與 `@asiaostrich/telemetry-client` 的 `TelemetryUploader.upload()` 相容。
+ * 鴨型別介面，與 `asiaostrich-telemetry-client` 的 `TelemetryUploader.upload()` 相容。
  * 使用介面而非類別，方便測試 mock。
  */
 export interface OrchestrationTelemetryClient {
@@ -1210,10 +1210,10 @@ export interface OrchestratorOptions {
    * 僅包含匿名統計數字（task 數量、成功/失敗率、重試次數、耗時），
    * 不含 prompt / output / session_id 等敏感內容。
    *
-   * 與 `@asiaostrich/telemetry-client` 的 `TelemetryUploader` 直接相容：
+   * 與 `asiaostrich-telemetry-client` 的 `TelemetryUploader` 直接相容：
    * @example
    * ```typescript
-   * import { TelemetryUploader } from "@asiaostrich/telemetry-client"
+   * import { TelemetryUploader } from "asiaostrich-telemetry-client"
    * const uploader = new TelemetryUploader({ serverUrl: "...", apiKey: "..." })
    * await orchestrate(plan, adapter, { orchestrationTelemetry: uploader })
    * ```

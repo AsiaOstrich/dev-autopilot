@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { orchestrate } from "../orchestrator.js";
 import { LocalStorageBackend, FileServerStorageBackend } from "../execution-history/storage-backend.js";
 import type { AgentAdapter, TaskPlan, TaskResult, Task } from "../types.js";
-import type { TelemetryUploader } from "@asiaostrich/telemetry-client";
+import type { TelemetryUploader } from "asiaostrich-telemetry-client";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,14 +24,14 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 // ============================================================
-// Mock @asiaostrich/telemetry-client
+// Mock asiaostrich-telemetry-client
 // ============================================================
 
 const mockUpload = vi.fn().mockResolvedValue(undefined);
 const mockUploaderInstance = { upload: mockUpload } as unknown as TelemetryUploader;
 const MockTelemetryUploader = vi.fn().mockReturnValue(mockUploaderInstance);
 
-vi.mock("@asiaostrich/telemetry-client", () => ({
+vi.mock("asiaostrich-telemetry-client", () => ({
   TelemetryUploader: MockTelemetryUploader,
 }));
 
