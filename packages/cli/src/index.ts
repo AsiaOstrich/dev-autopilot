@@ -30,6 +30,8 @@ import { createBddCommand } from "./commands/bdd.js";
 import { createReviewCommand } from "./commands/review.js";
 import { createAtddCommand } from "./commands/atdd.js";
 import { createPrCommand } from "./commands/pr.js";
+import { createHitlCommand } from "./commands/hitl.js";
+import { createRunIntentCommand } from "./commands/run-intent.js";
 import {
   orchestrate,
   validatePlan,
@@ -298,5 +300,7 @@ program.addCommand(createBddCommand());    // XSPEC-086 Phase 4
 program.addCommand(createReviewCommand()); // XSPEC-086 Phase 4
 program.addCommand(createAtddCommand());   // XSPEC-086 Phase 4
 program.addCommand(createPrCommand());     // XSPEC-086 Phase 4
+program.addCommand(createHitlCommand());   // XSPEC-086 Phase 5a
+program.addCommand(createRunIntentCommand()); // XSPEC-086 Phase 5a
 
 program.parse();
