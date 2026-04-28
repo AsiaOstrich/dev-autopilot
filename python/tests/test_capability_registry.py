@@ -3,7 +3,6 @@ test_capability_registry.py — XSPEC-027 Phase 3 Python 雙版本測試
 
 8 個測試，覆蓋 CapabilityRegistry 和 ModelRouter 核心功能。
 """
-import pytest
 from devap.capabilities.capability_registry import CapabilityRegistry
 from devap.capabilities.model_router import route
 from devap.capabilities.types import (

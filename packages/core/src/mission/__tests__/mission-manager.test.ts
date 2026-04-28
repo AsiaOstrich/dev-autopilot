@@ -18,7 +18,7 @@ describe("MissionManager", () => {
       expect(record.type).toBe("genesis");
       expect(record.intent).toBe("build new auth module");
       expect(record.status).toBe("PLANNING");
-      expect(record.id).toMatch(/^mission-\d+$/);
+      expect(record.id).toMatch(/^mission-\d+-[a-z0-9]+$/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

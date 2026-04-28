@@ -52,7 +52,7 @@ export class MissionManager {
   }
 
   async create(type: MissionType, intent: string): Promise<MissionRecord> {
-    const id = `mission-${Date.now()}`;
+    const id = `mission-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const record: MissionRecord = {
       id,
       type,
