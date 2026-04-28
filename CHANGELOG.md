@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-28
+
+> **Minor Release**: XSPEC-095 全部完成 — Mission / Workflow / Sweep / Flow 四大模組 + 5 個新 CLI 命令、tests 1176→1231。
+
+### Added
+
+#### XSPEC-095 Phase 1 — Mission 任務狀態機
+- `packages/core/src/mission/` — `MissionManager` 狀態機，持久化至 `.devap/missions/<id>.json`；五種任務類型（genesis / renovate / medic / exodus / guardian）；狀態轉換：PLANNING → IN_PROGRESS → PAUSED → COMPLETED / CANCELLED
+- `devap mission start <type> "<intent>"` — 建立並啟動 Mission（類型不合法 exit 1）
+- `devap mission status` / `pause` / `resume` / `cancel` / `list`
+
+#### XSPEC-095 Phase 2 — WorkflowState 持久化
+- `packages/core/src/workflow-state/` — `WorkflowStateManager`，持久化執行狀態至 `.devap/workflow-state/<name>.json`
+- `devap workflow list` — 列出 `.devap/flows/` 下所有 workflow，顯示最後執行狀態
+- `devap workflow execute <name> [--resume] [--dry-run]` — 執行 flow；`--resume` 從上次完成步驟繼續；相容 `name+steps`（FlowParser）與 `id+name+version+phases` 兩種 YAML 格式；遇 `HUMAN_CONFIRM` gate 暫停後可 `--resume`
+- `devap workflow status [name]`
+
+#### XSPEC-095 Phase 3 — AutoSweep 程式碼品質掃描
+- `packages/core/src/sweep/` — `runAutoSweep()` + `SWEEP_PATTERNS`，四種內建模式：console-log（可修復）、debugger（可修復）、todo-fixme（僅報告）、ts-any（僅報告）
+- `devap sweep [--fix] [--report] [--patterns] [--exclude] [--cwd]`：`--fix` 超過 20 處觸發 HITL Gate；`--report` 輸出 `.devap/sweep-report.json`
+
+#### XSPEC-095 Phase 4 — Flow 管理 CLI
+- `devap flow list` / `validate <id>` / `diff <a> <b>` — 列出、驗證、比較 `.devap/flows/*.flow.yaml`
+
 ## [0.4.0] - 2026-04-28
 
 > **Minor Release**: XSPEC-086 Phase 3/4/5a + XSPEC-090~094 — 12 個新 CLI 命令、XSPEC-090~094 全部實作完成、tests 892→1176。
