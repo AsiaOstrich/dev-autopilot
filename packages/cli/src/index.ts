@@ -24,6 +24,8 @@ import { createStartCommand } from "./commands/start.js";
 import { createStatusCommand } from "./commands/status.js";
 import { createDeployCommand } from "./commands/deploy.js";
 import { createTddCommand } from "./commands/tdd.js";
+import { createCheckinCommand } from "./commands/checkin.js";
+import { createSddCommand } from "./commands/sdd.js";
 import {
   orchestrate,
   validatePlan,
@@ -286,5 +288,7 @@ program.addCommand(createStartCommand());  // XSPEC-090
 program.addCommand(createStatusCommand()); // XSPEC-092
 program.addCommand(createDeployCommand()); // XSPEC-093
 program.addCommand(createTddCommand());    // XSPEC-086 Phase 4
+program.addCommand(createCheckinCommand()); // XSPEC-086 Phase 4
+program.addCommand(createSddCommand());    // XSPEC-086 Phase 4
 
 program.parse();
