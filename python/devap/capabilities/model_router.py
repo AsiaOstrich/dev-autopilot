@@ -6,6 +6,8 @@ Pareto 加權最優模型選擇，TypeScript 版本的 Python 對應實作。
 """
 from __future__ import annotations
 
+from typing import Any
+
 from .types import ModelCandidate, ModelEntry, TaskProfile
 
 
@@ -16,7 +18,7 @@ def _pool_entry(pool: list[ModelEntry], model_id: str) -> ModelEntry:
     raise ValueError(f"Model {model_id!r} not found in pool")
 
 
-def route(pool: list[ModelEntry], task_profile: TaskProfile) -> dict:
+def route(pool: list[ModelEntry], task_profile: TaskProfile) -> dict[str, Any]:
     """
     根據模型池與任務需求，選出最優模型並回傳路由結果。
 

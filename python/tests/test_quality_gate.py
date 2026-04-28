@@ -1,6 +1,7 @@
 """quality_gate.py 測試"""
 
 import pytest
+from pathlib import Path
 from devap.models.types import (
     CompletionCheck,
     QualityConfig,
@@ -359,12 +360,12 @@ base: 8px
 class TestFrontendDesignCompliance:
     """前端設計合規性檢查測試（XSPEC-026 AC-3.x）"""
 
-    def test_no_design_md_returns_none(self, tmp_path: "pytest.TempPathFactory") -> None:
+    def test_no_design_md_returns_none(self, tmp_path: Path) -> None:
         """AC-3.1：DESIGN.md 不存在時回傳 None（純後端/CLI 專案不被 block）"""
         result = check_frontend_design_compliance(str(tmp_path))
         assert result is None
 
-    def test_valid_design_md_passes(self, tmp_path: "pytest.TempPathFactory") -> None:
+    def test_valid_design_md_passes(self, tmp_path: Path) -> None:
         """AC-3.1 + AC-3.2：有效的完整 DESIGN.md → passed=True"""
         (tmp_path / "DESIGN.md").write_text(_VALID_DESIGN_MD, encoding="utf-8")
         result = check_frontend_design_compliance(str(tmp_path))
@@ -373,7 +374,7 @@ class TestFrontendDesignCompliance:
         assert result.step.name == "frontend_design_check"
         assert result.missing_sections is None
 
-    def test_missing_required_sections_fails(self, tmp_path: "pytest.TempPathFactory") -> None:
+    def test_missing_required_sections_fails(self, tmp_path: Path) -> None:
         """AC-3.2：缺少必填段落時 passed=False，並回報具體缺失欄位名稱"""
         content = "# DESIGN\n\n## visual_theme\nLight.\n\n## color_palette\nbg: #fff\n"
         (tmp_path / "DESIGN.md").write_text(content, encoding="utf-8")
@@ -387,7 +388,7 @@ class TestFrontendDesignCompliance:
         assert "layout_spacing" in result.missing_sections
         assert "design_guidelines" in result.missing_sections
 
-    def test_error_message_contains_missing_section_names(self, tmp_path: "pytest.TempPathFactory") -> None:
+    def test_error_message_contains_missing_section_names(self, tmp_path: Path) -> None:
         """AC-3.3：錯誤訊息應清楚說明缺失的段落名稱"""
         content = "# DESIGN\n## visual_theme\nDark theme.\n"
         (tmp_path / "DESIGN.md").write_text(content, encoding="utf-8")
@@ -400,7 +401,7 @@ class TestFrontendDesignCompliance:
         assert "color_palette" in result.step.output
         assert "typography" in result.step.output
 
-    def test_missing_color_tokens_warns_but_passes(self, tmp_path: "pytest.TempPathFactory") -> None:
+    def test_missing_color_tokens_warns_but_passes(self, tmp_path: Path) -> None:
         """必填段落完整但缺少語義色彩 token → passed=True（warning 不 block）"""
         content = "\n".join([
             "# DESIGN",
@@ -432,7 +433,7 @@ class TestFrontendDesignCompliance:
         assert result.missing_color_tokens is not None
         assert "surface" in result.missing_color_tokens
 
-    def test_insufficient_anti_patterns_warns_but_passes(self, tmp_path: "pytest.TempPathFactory") -> None:
+    def test_insufficient_anti_patterns_warns_but_passes(self, tmp_path: Path) -> None:
         """anti_patterns 不足（< 5）→ passed=True（warning），anti_pattern_count 正確"""
         content = "\n".join([
             "# DESIGN",
@@ -465,7 +466,7 @@ class TestFrontendDesignCompliance:
         assert result.anti_pattern_count < 5
         assert "anti_patterns" in result.step.output
 
-    def test_kebab_case_section_names_recognized(self, tmp_path: "pytest.TempPathFactory") -> None:
+    def test_kebab_case_section_names_recognized(self, tmp_path: Path) -> None:
         """kebab-case 段落名稱（如 ## visual-theme）也應被識別為合規"""
         content = "\n".join([
             "# DESIGN",
@@ -499,7 +500,7 @@ class TestFrontendDesignCompliance:
         assert result.missing_sections is None
 
     @pytest.mark.asyncio
-    async def test_run_quality_gate_design_issues_non_blocking(self, tmp_path: "pytest.TempPathFactory") -> None:
+    async def test_run_quality_gate_design_issues_non_blocking(self, tmp_path: Path) -> None:
         """runQualityGate 整合：DESIGN.md 有問題但不 block 整體 QualityGate"""
         # 寫一個缺少必填段落的 DESIGN.md
         (tmp_path / "DESIGN.md").write_text("# DESIGN\n## visual_theme\nLight.", encoding="utf-8")

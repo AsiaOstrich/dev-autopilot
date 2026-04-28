@@ -189,7 +189,7 @@ class TestEpistemicRouting:
     @pytest.mark.asyncio
     async def test_needs_context_not_treated_as_failure(self):
         """needs_context 任務不因 log 訊息被誤判為失敗"""
-        progress_messages = []
+        progress_messages: list[str] = []
 
         class AskAdapter(AgentAdapter):
             @property
@@ -223,7 +223,7 @@ class TestEpistemicRouting:
     @pytest.mark.asyncio
     async def test_blocked_not_treated_as_failure(self):
         """blocked 任務不因 log 訊息被誤判為失敗"""
-        progress_messages = []
+        progress_messages: list[str] = []
 
         class AbstainAdapter(AgentAdapter):
             @property

@@ -88,7 +88,7 @@ async def run_fix_loop(
                 success=False,
                 attempts=[*attempts, attempt],
                 total_retry_cost_usd=total_retry_cost,
-                stop_reason=result.epistemic_action,  # "ask" or "abstain"
+                stop_reason="ask" if result.epistemic_action == "ask" else "abstain",
             )
 
         attempt = FixLoopAttempt(
