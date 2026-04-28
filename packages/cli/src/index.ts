@@ -35,6 +35,7 @@ import { createRunIntentCommand } from "./commands/run-intent.js";
 import { createMissionCommand } from "./commands/mission.js";
 import { createFlowManagementCommand } from "./commands/flow-mgmt.js";
 import { createSweepCommand } from "./commands/sweep.js";
+import { createWorkflowCommand } from "./commands/workflow.js";
 import {
   orchestrate,
   validatePlan,
@@ -308,5 +309,6 @@ program.addCommand(createRunIntentCommand()); // XSPEC-086 Phase 5a
 program.addCommand(createMissionCommand());        // XSPEC-095 Phase 1
 program.addCommand(createFlowManagementCommand()); // XSPEC-095 Phase 4
 program.addCommand(createSweepCommand());          // XSPEC-095 Phase 3
+program.addCommand(createWorkflowCommand());       // XSPEC-095 Phase 2
 
 program.parse();

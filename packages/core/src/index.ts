@@ -94,6 +94,13 @@ export {
 } from "./result-merger.js";
 // XSPEC-095: Mission 概念（Phase 1）
 export { MissionManager } from "./mission/mission-manager.js";
+// XSPEC-095: WorkflowState（Phase 2）
+export {
+  WorkflowStateManager,
+  type WorkflowState,
+  type WorkflowRunStatus,
+  type WorkflowStepRecord,
+} from "./workflow-state/index.js";
 // XSPEC-095: AutoSweep（Phase 3）
 export {
   runAutoSweep,
