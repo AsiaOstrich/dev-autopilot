@@ -13,7 +13,7 @@ export { runFixLoop, buildStructuredFeedback, computeErrorFingerprint, isStuck, 
 export { parseTelemetryJsonl } from "./telemetry-parser.js";
 export { TokenCostAnalyzer, ProposalGenerator, HookEfficiencyAnalyzer, HookEfficiencyProposalGenerator, QualityStrategyAnalyzer, QualityStrategyProposalGenerator, DriftDetector, ApprovalManager, serializeProposal, parseProposal } from "./evolution/index.js";
 export type { EvolutionConfig, AnalyzerConfig, QualityStrategyConfig, DriftDetectionConfig, AnalysisResult, HookEfficiencyAnalysisResult, HookEfficiencyIssue, QualityStrategyAnalysisResult, QualityStrategyIssue, QualityStrategySignal, DriftAnalysisResult, DriftItem, DriftType, GroupKey, GroupStats, Outlier, Proposal, ProposalMeta, ProposalStatus, ProposalImpact, ProposalTarget, AnalysisLogEntry, ConfirmApplyFn, ApprovalResult } from "./evolution/index.js";
-export { LocalStorageBackend } from "./execution-history/index.js";
+export { LocalStorageBackend, AccessReader } from "./execution-history/index.js";
 // SPEC-015: 打包框架
 export { loadRecipe, resolveConfig, executeTarget, interpolateCommand, orchestratePackaging } from "./packaging/index.js";
 export type { PackagingTarget, PackagingConfig, Recipe, RecipeStep, PackagingResult, OrchestrateOptions } from "./packaging/index.js";
