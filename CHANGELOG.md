@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-28
+
+> **Minor Release**: XSPEC-086 Phase 3/4/5a + XSPEC-090~094 — 12 個新 CLI 命令、XSPEC-090~094 全部實作完成、tests 892→1176。
+
+### Added
+
+#### XSPEC-086 Phase 3 — Hybrid Standards 流程拆分
+- `standards/flow/git-workflow-decisions.ai.yaml` — Git 工作流程決策矩陣（branch/merge/conflict）
+- `standards/flow/push-gate-sequence.ai.yaml` — push gate 執行順序定義
+- `standards/flow/checkin-gate-sequence.ai.yaml` — checkin 品質閘門序列
+- `standards/flow/pipeline-security-gate-sequence.ai.yaml` — 安全掃描閘門順序
+- `standards/flow/verification-evidence-collection.ai.yaml` — 驗證證據收集流程
+- `standards/flow/dual-phase-processing.ai.yaml` — 雙階段處理協定（Thinking + Output）
+
+#### XSPEC-086 Phase 4 — Skills 流程 CLI 命令（10 個）
+- `devap push` — push gate 序列強制執行（分支保護 + force push 偵測）
+- `devap tdd` — RED→GREEN→REFACTOR 循環引導（`--test-cmd` 可設定測試命令）
+- `devap checkin` — pre-commit 品質關卡（build/tests/lint 硬閘門；docs/workflow 軟閘門）
+- `devap sdd` — 7-phase SDD 狀態機（DISCUSS→CREATE→REVIEW→APPROVE→IMPLEMENT→VERIFY→ARCHIVE；`--phase` 跳入任意階段）
+- `devap bdd` — BDD 4-phase 循環（DISCOVERY→FORMULATION→AUTOMATION→LIVING DOCS；整合 `npx cucumber-js`）
+- `devap review` — 8-category 程式碼審查（BLOCKING/IMPORTANT/SUGGESTION/QUESTION/NOTE 前綴；自動判斷 APPROVE/REQUEST_CHANGES）
+- `devap atdd` — ATDD 5-phase 生命週期（WORKSHOP→DISTILLATION→DEVELOPMENT→DEMO→DONE；INVEST 驗證 + AC→Gherkin）
+- `devap pr` — PR 5-step 生命週期（CREATE→REVIEW→APPROVE→MERGE→CLEANUP；diff size >400 行封鎖；整合 `gh` CLI）
+- 對應 flow YAML：`.devap/flows/{tdd,checkin,sdd,bdd,review,atdd,pr}.flow.yaml`
+
+#### XSPEC-086 Phase 5a — UDS CLI 編排移植（2 個）
+- `devap hitl` — HITL CLI 閘門（`--op` 必填；`--always-require` 白名單；exit 0/1 供腳本使用）
+- `devap run-intent` — intent 解析器（test/lint/build/security/format/typecheck；搜尋順序：`.devap/project.yaml` → `package.json` → `Makefile`；`--dry-run` + `--list`）
+
+#### XSPEC-090 — Spec 合規閘門
+- `devap start <type> "<intent>"` — 啟動前強制 XSPEC 存在性驗證（Genesis/Renovate/Medic/Exodus/Guardian 任務類型）
+
+#### XSPEC-091 — HITL Gate 正式化
+- `packages/core/src/hitl-gate.ts` — `runHITLGate()` + `shouldRequireHITL()`（AC-1~6 全部實作）
+- 逾時（300s 預設）→ 自動 REJECTED；非 TTY 環境 → 立即失敗
+
+#### XSPEC-092 — Token 預算管理
+- `packages/core/src/token-budget.ts` — `TokenBudgetTracker`（claude-opus-4-7/sonnet-4-6/haiku-4-5 + gpt-4o/mini 定價）
+- `devap status --cost` — 讀取 `.devap/history` 顯示累積成本
+
+#### XSPEC-093 — Deploy 原語
+- `packages/core/src/deploy/` — `DeployRunner` + `EnvironmentGate`（cloudflare-workers / docker-compose）
+- `devap deploy <target> --env <env>` — 環境閘門 + dry-run 支援
+
+#### XSPEC-094 — Multi-Agent 協調
+- `packages/core/src/agent-pool.ts` — `AgentPool`（maxConcurrentAgents 上限 + 排隊；sequential mode 自動降級）
+- `packages/core/src/memory-guard.ts` — `MemoryGuard`（spawn 前記憶體檢查，預設閾值 2048 MB）
+- `packages/core/src/worktree-manager.ts` 強化 — `scheduleCleanup()` 自動清理排程
+
+### Fixed
+- `packages/core/src/index.ts` — 補上遺漏的 `AccessReader` export（導致 CLI build 失敗）
+
+### Tests
+- 總測試數：892 → 1176（+284）
+  - core: 892（持平）
+  - CLI: 126 → 150（+24 Phase 4/5a 命令）
+  - adapter-claude: 84；adapter-vibeops: 32；adapter-cli: 9；adapter-opencode: 9
+
 ## [0.3.0] - 2026-04-27
 
 > **Minor Release**: XSPEC-086 Phase 0/1/2/6/7 — 統一流程模型、commit 閘門、release 命令、8 個 UDS 流程標準遷移至 DevAP、全專案安裝（dev-platform/VibeOps/UDS dogfooding）。

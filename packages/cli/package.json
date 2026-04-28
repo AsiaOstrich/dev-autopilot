@@ -1,6 +1,6 @@
 {
   "name": "dev-autopilot",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Agent-agnostic unattended development orchestrator. Plan → Execute → Review.",
   "type": "module",
   "main": "dist/index.js",
