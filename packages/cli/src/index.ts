@@ -23,6 +23,7 @@ import { createCommitCommand } from "./commands/commit.js";
 import { createStartCommand } from "./commands/start.js";
 import { createStatusCommand } from "./commands/status.js";
 import { createDeployCommand } from "./commands/deploy.js";
+import { createTddCommand } from "./commands/tdd.js";
 import {
   orchestrate,
   validatePlan,
@@ -284,5 +285,6 @@ program.addCommand(createCommitCommand()); // XSPEC-088
 program.addCommand(createStartCommand());  // XSPEC-090
 program.addCommand(createStatusCommand()); // XSPEC-092
 program.addCommand(createDeployCommand()); // XSPEC-093
+program.addCommand(createTddCommand());    // XSPEC-086 Phase 4
 
 program.parse();
